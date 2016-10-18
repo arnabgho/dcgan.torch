@@ -129,6 +129,8 @@ netI_clone=netI:clone('weight','bias','gradWeight','gradBias')
 netI_clone:apply(weights_init)
 
 softmax_I=nn.SoftMax()
+MM1=nn.MM()
+MM2=nn.MM()
 
 local netD = nn.Sequential()
 
@@ -201,6 +203,9 @@ elseif opt.noise == 'normal' then
     noise_vis:normal(0, 1)
 end
 
+local input_att1=torch.Tensor(opt.batchSize, 3*opt.fineSize*opt.fineSize)
+local input_att2=torch.Tensor(opt.batchSize, 3*opt.fineSize* opt.fineSize)
+
 -- create closure to evaluate f(X) and df/dX of discriminator
 local fDx = function(x)
    gradParametersD:zero()
@@ -223,7 +228,27 @@ local fDx = function(x)
    elseif opt.noise == 'normal' then
        noise:normal(0, 1)
    end
-   local fake = netG:forward(noise)
+   local fake1 = netG1:forward(noise)
+   local fake2 = netG2:forward(noise)
+
+   local att1 = netI:forward(fake1)
+   local att2 = netI_clone:forward(fake2)
+
+
+   fake1:resize(batchSize,nc * 64 * 64,1)
+   fake2:resize(batchSize,nc * 64 * 64,1)
+   
+   att1:resize(batchSize,1,1)
+   att2:resize(batchSize,1,1)
+
+   local fake1_att1=MM1:forward({fake1,att1})
+   local fake2_att2=MM2:forward({fake2,att2})
+
+   input_att1:fill(fake1_att1)
+   input_att2:fill(fake2_att2)
+
+   local fake=fake1_att1+fake2_att2
+   fake:resize(batchSize,nc,64,64)
    input:copy(fake)
    label:fill(fake_label)
 
@@ -241,19 +266,33 @@ end
 local fGx = function(x)
    gradParametersG1:zero()
    gradParametersG2:zero()
+   gradParametersI:zero()
+   gradParametersI_clone:zero()
    --[[ the three lines below were already executed in fDx, so save computation
    noise:uniform(-1, 1) -- regenerate random noise
    local fake = netG:forward(noise)
    input:copy(fake) ]]--
-   -- assuming all the required outputs have been precomputed
+   -- assuming all the required outputs have been precomputed in fDx
    label:fill(real_label) -- fake labels are real for generator cost
 
    local output = netD.output -- netD:forward(input) was already executed in fDx, so save computation
    errG = criterion:forward(output, label)
    local df_do = criterion:backward(output, label)
 
-
    local df_dg = netD:updateGradInput(input, df_do)
+
+   local df_fake1_att1=MM1:backward({net_G1.output:reshape(batchSize,nc * 64 * 64,1), net_I.output:reshape(batchSize,1,1) },df_dg:reshape(batchSize,nc * 64 * 64,1))
+   
+   local df_fake2_att2=MM2:backward({net_G2.output:reshape(batchSize,nc * 64 * 64,1), net_I.output:reshape(batchSize,1,1) },df_dg:reshape(batchSize,nc * 64 * 64,1))
+
+   local df_dI = netI:backward(net_G1.output,df_fake1_att1[2]:reshape(batchSize))
+   local df_dI_clone = netI_clone:backward(net_G2.output,df_fake2_att2[2]:reshape(batchSize))
+   
+   df_dI:add(df_fake1_att1[1]:reshape(batchSize,nc,64,64,1))
+   df_dI_clone:add(df_fake2_att2[1]:reshape(batchSize,nc,64,64,1))
+
+   local df_dG1=net_G1:backward(noise,df_dI)
+   local df_dG2=net_G2:backward(noise,df_dI_clone)
 
    netG1:backward(noise, df_dg)
    return errG, gradParametersG
