@@ -60,7 +60,6 @@ local SpatialBatchNormalization = nn.SpatialBatchNormalization
 local SpatialConvolution = nn.SpatialConvolution
 local SpatialFullConvolution = nn.SpatialFullConvolution
 
-
 local G={}
 G.netG1 = nn.Sequential()
 -- input is Z, going into a convolution
@@ -202,7 +201,7 @@ elseif opt.noise == 'normal' then
     noise_vis:normal(0, 1)
 end
 
-
+local input_att_softmax=torch.Tensor(2,opt.batchSize)
 -- create closure to evaluate f(X) and df/dX of discriminator
 local fDx = function(x)
    gradParametersD:zero()
@@ -230,8 +229,13 @@ local fDx = function(x)
 
    local att1 = G.netI:forward(fake1)
    local att2 = G.netI_clone:forward(fake2)
-
-
+   local att12 = torch.cat(att1,att2,2)   -- size (batch_size , 2)
+  
+   local att12_softmax=G.softmax_I:forward(att12)
+   input_att_softmax:fill(att12_softmax:transpose(1,2))
+   att1=att12_softmax:transpose(1,2)[1]
+   att2=att12_softmax:transpose(1,2)[2]
+   
    fake1:resize(opt.batchSize,nc * 64 * 64,1)
    fake2:resize(opt.batchSize,nc * 64 * 64,1)
    
@@ -273,12 +277,15 @@ local fGx = function(x)
 
    local df_dg = netD:updateGradInput(input, df_do)
 
-   local df_fake1_att1=G.MM1:backward({net_G1.output:reshape(opt.batchSize,nc * 64 * 64,1), net_I.output:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
+   local df_fake1_att1=G.MM1:backward({G.net_G1.output:reshape(opt.batchSize,nc * 64 * 64,1), input_att_softmax[1]:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
    
-   local df_fake2_att2=G.MM2:backward({net_G2.output:reshape(opt.batchSize,nc * 64 * 64,1), netI_clone.output:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
+   local df_fake2_att2=G.MM2:backward({G.net_G2.output:reshape(opt.batchSize,nc * 64 * 64,1), input_att_softmax[2]:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
 
-   local df_dI = G.netI:backward(G.net_G1.output,df_fake1_att1[2]:reshape(opt.batchSize))
-   local df_dI_clone = G.netI_clone:backward(G.net_G2.output,df_fake2_att2[2]:reshape(opt.batchSize))
+   local req_softmax=torch.cat(  df_fake1_att1[2]:reshape(opt.batchSize)  ,  df_fake2_att2[2]:reshape(opt.batchSize)   ,  2  )
+   local df_softmax=G.softmax_I:backward(input_att_softmax:transpose(1,2), req_softmax  ):transpose(1,2)
+
+   local df_dI = netI:backward(G.net_G1.output,df_softmax[1]:reshape(opt.batchSize))
+   local df_dI_clone = netI_clone:backward(G.net_G2.output,df_softmax[2]:reshape(opt.batchSize))
    
    df_dI:add(df_fake1_att1[1]:reshape(opt.batchSize,nc,64,64,1))
    df_dI_clone:add(df_fake2_att2[1]:reshape(opt.batchSize,nc,64,64,1))
@@ -289,15 +296,18 @@ local fGx = function(x)
    return errG, gradParametersG
 end
 
-
 local function generate_samples(noise)
    local fake1 = G.netG1:forward(noise)
    local fake2 = G.netG2:forward(noise)
 
    local att1 = G.netI:forward(fake1)
    local att2 = G.netI_clone:forward(fake2)
-
-
+   local att12 = torch.cat(att1,att2,2)   -- size (batch_size , 2)
+  
+   local att12_softmax=G.softmax_I:forward(att12)
+   att1=att12_softmax:transpose(1,2)[1]
+   att2=att12_softmax:transpose(1,2)[2]
+   
    fake1:resize(opt.batchSize,nc * 64 * 64,1)
    fake2:resize(opt.batchSize,nc * 64 * 64,1)
    
@@ -309,9 +319,9 @@ local function generate_samples(noise)
 
 
    local fake=fake1_att1+fake2_att2
-   fake:resize(opt.batchSize,nc,64,64)
-   
+   return fake
 end
+
 
 -- train
 for epoch = 1, opt.niter do
