@@ -278,18 +278,18 @@ local fGx = function(x)
 
    local df_dg = netD:updateGradInput(input, df_do)
 
-   local df_fake1_att1=G.MM1:backward({net_G1.output:reshape(opt.batchSize,nc * 64 * 64,1), net_I.output:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
+   local df_fake1_att1=G.MM1:backward({G.netG1.output:reshape(opt.batchSize,nc * 64 * 64,1), G.netI.output:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
    
-   local df_fake2_att2=G.MM2:backward({net_G2.output:reshape(opt.batchSize,nc * 64 * 64,1), netI_clone.output:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
+   local df_fake2_att2=G.MM2:backward({G.netG2.output:reshape(opt.batchSize,nc * 64 * 64,1), G.netI_clone.output:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
 
-   local df_dI = G.netI:backward(G.net_G1.output,df_fake1_att1[2]:reshape(opt.batchSize))
-   local df_dI_clone = G.netI_clone:backward(G.net_G2.output,df_fake2_att2[2]:reshape(opt.batchSize))
+   local df_dI = G.netI:backward(G.netG1.output:reshape(opt.batchSize,nc,64,64,1),df_fake1_att1[2]:reshape(opt.batchSize))
+   local df_dI_clone = G.netI_clone:backward(G.netG2.output:reshape(opt.batchSize,nc,64,64,1),df_fake2_att2[2]:reshape(opt.batchSize))
    
    df_dI:add(df_fake1_att1[1]:reshape(opt.batchSize,nc,64,64,1))
    df_dI_clone:add(df_fake2_att2[1]:reshape(opt.batchSize,nc,64,64,1))
 
-   G.net_G1:backward(noise,df_dI)
-   G.net_G2:backward(noise,df_dI_clone)
+   G.netG1:backward(noise,df_dI)
+   G.netG2:backward(noise,df_dI_clone)
 
    return errG, gradParametersG
 end
