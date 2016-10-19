@@ -18,7 +18,7 @@ opt = {
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
    gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'experiment1',
+   name = 'experiment-investigate1',
    noise = 'normal',       -- uniform / normal
 }
 
@@ -184,11 +184,16 @@ if opt.gpu > 0 then
    if pcall(require, 'cudnn') then
       require 'cudnn'
       cudnn.benchmark = true
-      cudnn.convert(netG, cudnn)
+      --cudnn.convert(netG, cudnn)
+      for k,net in pairs(G) do cudnn.convert(net,cudnn)  end
       cudnn.convert(netD, cudnn)
    end
-   netD:cuda();           netG:cuda();           criterion:cuda()
+   netD:cuda();           --netG:cuda();          
+   criterion:cuda()
+   for k,net in pairs(G) do net:cuda() end
 end
+
+
 
 local parametersD, gradParametersD = netD:getParameters()
 local parametersG, gradParametersG = model_utils.combine_all_parameters(G)
@@ -344,13 +349,14 @@ for epoch = 1, opt.niter do
                  errG and errG or -1, errD and errD or -1))
       end
    end
-   paths.mkdir('checkpoints')
+   paths.mkdir('checkpoints_investigate')
    parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', netG:clearState())
-   torch.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
+   torch.save('checkpoints_investigate/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG1:clearState(),G.netI:clearState() } )
+   torch.save('checkpoints_investigate/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
    parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
-   parametersG, gradParametersG = netG:getParameters()
+   --parametersG, gradParametersG = netG:getParameters()
+   parametersG, gradParametersG = model_utils.combine_all_parameters(G)
    print(('End of epoch %d / %d \t Time Taken: %.3f'):format(
             epoch, opt.niter, epoch_tm:time().real))
 end
