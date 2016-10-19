@@ -235,7 +235,7 @@ local fDx = function(x)
    local att12 = torch.cat(att1,att2,2)   -- size (batch_size , 2)
   
    local att12_softmax=G.softmax_I:forward(att12)
-   input_att_softmax:fill(att12_softmax:transpose(1,2))
+   input_att_softmax=att12_softmax:transpose(1,2)
    att1=att12_softmax:transpose(1,2)[1]
    att2=att12_softmax:transpose(1,2)[2]
    
@@ -280,21 +280,21 @@ local fGx = function(x)
 
    local df_dg = netD:updateGradInput(input, df_do)
 
-   local df_fake1_att1=G.MM1:backward({G.net_G1.output:reshape(opt.batchSize,nc * 64 * 64,1), input_att_softmax[1]:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
+   local df_fake1_att1=G.MM1:backward({G.netG1.output:reshape(opt.batchSize,nc * 64 * 64,1), input_att_softmax[1]:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
    
-   local df_fake2_att2=G.MM2:backward({G.net_G2.output:reshape(opt.batchSize,nc * 64 * 64,1), input_att_softmax[2]:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
+   local df_fake2_att2=G.MM2:backward({G.netG2.output:reshape(opt.batchSize,nc * 64 * 64,1), input_att_softmax[2]:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
 
    local req_softmax=torch.cat(  df_fake1_att1[2]:reshape(opt.batchSize)  ,  df_fake2_att2[2]:reshape(opt.batchSize)   ,  2  )
    local df_softmax=G.softmax_I:backward(input_att_softmax:transpose(1,2), req_softmax  ):transpose(1,2)
 
-   local df_dI = netI:backward(G.net_G1.output,df_softmax[1]:reshape(opt.batchSize))
-   local df_dI_clone = netI_clone:backward(G.net_G2.output,df_softmax[2]:reshape(opt.batchSize))
+   local df_dI = G.netI:backward(G.netG1.output:reshape(opt.batchSize,nc,64,64,1),df_softmax[1]:reshape(opt.batchSize))
+   local df_dI_clone = G.netI_clone:backward(G.netG2.output:reshape(opt.batchSize,nc,64,64,1),df_softmax[2]:reshape(opt.batchSize))
    
    df_dI:add(df_fake1_att1[1]:reshape(opt.batchSize,nc,64,64,1))
    df_dI_clone:add(df_fake2_att2[1]:reshape(opt.batchSize,nc,64,64,1))
 
-   G.net_G1:backward(noise,df_dI)
-   G.net_G2:backward(noise,df_dI_clone)
+   G.netG1:backward(noise,df_dI)
+   G.netG2:backward(noise,df_dI_clone)
 
    return errG, gradParametersG
 end
@@ -322,6 +322,7 @@ local function generate_samples(noise)
 
 
    local fake=fake1_att1+fake2_att2
+   fake:resize(opt.batchSize,nc,64,64)
    return fake
 end
 
@@ -360,7 +361,7 @@ for epoch = 1, opt.niter do
    paths.mkdir('checkpoints_investigate_att')
    parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_investigate_att/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG1:clearState(),G.netI:clearState() } )
+   torch.save('checkpoints_investigate_att/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState(),G.netI:clearState() } )
    torch.save('checkpoints_investigate_att/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
    parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()

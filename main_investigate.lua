@@ -315,7 +315,7 @@ local function generate_samples(noise)
 
    local fake=fake1_att1+fake2_att2
    fake:resize(opt.batchSize,nc,64,64)
-   
+   return fake 
 end
 
 -- train
@@ -352,7 +352,7 @@ for epoch = 1, opt.niter do
    paths.mkdir('checkpoints_investigate')
    parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_investigate/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG1:clearState(),G.netI:clearState() } )
+   torch.save('checkpoints_investigate/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState(),G.netI:clearState() } )
    torch.save('checkpoints_investigate/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
    parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()
