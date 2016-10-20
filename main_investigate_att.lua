@@ -19,8 +19,8 @@ opt = {
    display_id = 10,        -- display window id.
    gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
    name = 'experiment-investigate-att1',
-   --noise = 'normal',       -- uniform / normal
-   noise='uniform',
+   noise = 'normal',       -- uniform / normal
+   --noise='uniform',
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -54,7 +54,7 @@ local nc = 3
 local nz = opt.nz
 local ndf = opt.ndf
 local ngf = opt.ngf
-local real_label = 1
+local real_label = 0.9      -- in place of 1 as suggested by the paper "Improved Techniques for Training GANs"
 local fake_label = 0
 
 local SpatialBatchNormalization = nn.SpatialBatchNormalization
@@ -164,7 +164,7 @@ optimStateG = {
    beta1 = opt.beta1,
 }
 optimStateD = {
-   learningRate = opt.lr*0.1, -- hack to reduce the learning rate of the D
+   learningRate = opt.lr, -- hack to reduce the learning rate of the D
    beta1 = opt.beta1,
 }
 ----------------------------------------------------------------------------
