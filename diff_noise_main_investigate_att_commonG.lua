@@ -18,9 +18,8 @@ opt = {
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
    gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'experiment-investigate-att1',
-   --noise = 'normal',       -- uniform / normal
-   noise='uniform',
+   name = 'experiment-investigate-att1-commonG',
+   noise = 'normal',       -- uniform / normal
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -83,24 +82,24 @@ G.netG1:add(nn.Tanh())
 G.netG1:apply(weights_init)
 
 
-G.netG2 = nn.Sequential()
--- input is Z, going into a convolution
-G.netG2:add(SpatialFullConvolution(nz, ngf * 8, 4, 4))
-G.netG2:add(SpatialBatchNormalization(ngf * 8)):add(nn.ReLU(true))
--- state size: (ngf*8) x 4 x 4
-G.netG2:add(SpatialFullConvolution(ngf * 8, ngf * 4, 4, 4, 2, 2, 1, 1))
-G.netG2:add(SpatialBatchNormalization(ngf * 4)):add(nn.ReLU(true))
--- state size: (ngf*4) x 8 x 8
-G.netG2:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
-G.netG2:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
--- state size: (ngf*2) x 16 x 16
-G.netG2:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
-G.netG2:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
--- state size: (ngf) x 32 x 32
-G.netG2:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
-G.netG2:add(nn.Tanh())
--- state size: (nc) x 64 x 64
-
+--G.netG2 = nn.Sequential()
+---- input is Z, going into a convolution
+--G.netG2:add(SpatialFullConvolution(nz, ngf * 8, 4, 4))
+--G.netG2:add(SpatialBatchNormalization(ngf * 8)):add(nn.ReLU(true))
+---- state size: (ngf*8) x 4 x 4
+--G.netG2:add(SpatialFullConvolution(ngf * 8, ngf * 4, 4, 4, 2, 2, 1, 1))
+--G.netG2:add(SpatialBatchNormalization(ngf * 4)):add(nn.ReLU(true))
+---- state size: (ngf*4) x 8 x 8
+--G.netG2:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
+--G.netG2:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
+---- state size: (ngf*2) x 16 x 16
+--G.netG2:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
+--G.netG2:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
+---- state size: (ngf) x 32 x 32
+--G.netG2:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
+--G.netG2:add(nn.Tanh())
+---- state size: (nc) x 64 x 64
+G.netG2=G.netG1::clone('weight','bias','gradWeight','gradBias')
 G.netG2:apply(weights_init)
 
 G.netI = nn.Sequential()
@@ -164,12 +163,13 @@ optimStateG = {
    beta1 = opt.beta1,
 }
 optimStateD = {
-   learningRate = opt.lr*0.1, -- hack to reduce the learning rate of the D
+   learningRate = opt.lr,
    beta1 = opt.beta1,
 }
 ----------------------------------------------------------------------------
 local input = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
-local noise = torch.Tensor(opt.batchSize, nz, 1, 1)
+local noise1 = torch.Tensor(opt.batchSize, nz, 1, 1)
+local noise2 = torch.Tensor(opt.batchSize, nz, 1, 1)
 local label = torch.Tensor(opt.batchSize)
 local errD, errG
 local epoch_tm = torch.Timer()
@@ -179,7 +179,7 @@ local data_tm = torch.Timer()
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
-   input = input:cuda();  noise = noise:cuda();  label = label:cuda()
+   input = input:cuda();  noise1 = noise1:cuda(); noise2=noise2:cuda();  label = label:cuda()
 
    if pcall(require, 'cudnn') then
       require 'cudnn'
@@ -198,11 +198,14 @@ local parametersG, gradParametersG = model_utils.combine_all_parameters(G)
 
 if opt.display then disp = require 'display' end
 
-noise_vis = noise:clone()
+noise1_vis = noise1:clone()
+noise2_vis = noise2:clone()
 if opt.noise == 'uniform' then
-    noise_vis:uniform(-1, 1)
+    noise1_vis:uniform(-1, 1)
+    noise2_vis:uniform(-1, 1)
 elseif opt.noise == 'normal' then
-    noise_vis:normal(0, 1)
+    noise1_vis:normal(0, 1)
+    noise2_vis:normal(0, 1)
 end
 
 local input_att_softmax=torch.Tensor(2,opt.batchSize)
@@ -224,12 +227,14 @@ local fDx = function(x)
 
    -- train with fake
    if opt.noise == 'uniform' then -- regenerate random noise
-       noise:uniform(-1, 1)
+       noise1:uniform(-1, 1)
+       noise2:uniform(-1, 1)
    elseif opt.noise == 'normal' then
-       noise:normal(0, 1)
+       noise1:normal(0, 1)
+       noise2:normal(0, 1)
    end
-   local fake1 = G.netG1:forward(noise)
-   local fake2 = G.netG2:forward(noise)
+   local fake1 = G.netG1:forward(noise1)
+   local fake2 = G.netG2:forward(noise2)
 
    local att1 = G.netI:forward(fake1)
    local att2 = G.netI_clone:forward(fake2)
@@ -294,15 +299,15 @@ local fGx = function(x)
    df_dI:add(df_fake1_att1[1]:reshape(opt.batchSize,nc,64,64,1))
    df_dI_clone:add(df_fake2_att2[1]:reshape(opt.batchSize,nc,64,64,1))
 
-   G.netG1:backward(noise,df_dI)
-   G.netG2:backward(noise,df_dI_clone)
+   G.netG1:backward(noise1,df_dI)
+   G.netG2:backward(noise2,df_dI_clone)
 
    return errG, gradParametersG
 end
 
-local function generate_samples(noise)
-   local fake1 = G.netG1:forward(noise)
-   local fake2 = G.netG2:forward(noise)
+local function generate_samples(noise1,noise2)
+   local fake1 = G.netG1:forward(noise1)
+   local fake2 = G.netG2:forward(noise2)
 
    local att1 = G.netI:forward(fake1)
    local att2 = G.netI_clone:forward(fake2)
@@ -343,7 +348,7 @@ for epoch = 1, opt.niter do
       -- display
       counter = counter + 1
       if counter % 10 == 0 and opt.display then
-          local fake = generate_samples(noise_vis)
+          local fake = generate_samples(noise_vis1,noise_vis2)
           local real = data:getBatch()
           disp.image(fake, {win=opt.display_id, title=opt.name})
           disp.image(real, {win=opt.display_id * 3, title=opt.name})

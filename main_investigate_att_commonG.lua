@@ -18,9 +18,8 @@ opt = {
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
    gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'experiment-investigate-att1',
-   --noise = 'normal',       -- uniform / normal
-   noise='uniform',
+   name = 'experiment-investigate-att1-commonG',
+   noise = 'normal',       -- uniform / normal
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -83,24 +82,24 @@ G.netG1:add(nn.Tanh())
 G.netG1:apply(weights_init)
 
 
-G.netG2 = nn.Sequential()
--- input is Z, going into a convolution
-G.netG2:add(SpatialFullConvolution(nz, ngf * 8, 4, 4))
-G.netG2:add(SpatialBatchNormalization(ngf * 8)):add(nn.ReLU(true))
--- state size: (ngf*8) x 4 x 4
-G.netG2:add(SpatialFullConvolution(ngf * 8, ngf * 4, 4, 4, 2, 2, 1, 1))
-G.netG2:add(SpatialBatchNormalization(ngf * 4)):add(nn.ReLU(true))
--- state size: (ngf*4) x 8 x 8
-G.netG2:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
-G.netG2:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
--- state size: (ngf*2) x 16 x 16
-G.netG2:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
-G.netG2:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
--- state size: (ngf) x 32 x 32
-G.netG2:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
-G.netG2:add(nn.Tanh())
--- state size: (nc) x 64 x 64
-
+--G.netG2 = nn.Sequential()
+---- input is Z, going into a convolution
+--G.netG2:add(SpatialFullConvolution(nz, ngf * 8, 4, 4))
+--G.netG2:add(SpatialBatchNormalization(ngf * 8)):add(nn.ReLU(true))
+---- state size: (ngf*8) x 4 x 4
+--G.netG2:add(SpatialFullConvolution(ngf * 8, ngf * 4, 4, 4, 2, 2, 1, 1))
+--G.netG2:add(SpatialBatchNormalization(ngf * 4)):add(nn.ReLU(true))
+---- state size: (ngf*4) x 8 x 8
+--G.netG2:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
+--G.netG2:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
+---- state size: (ngf*2) x 16 x 16
+--G.netG2:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
+--G.netG2:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
+---- state size: (ngf) x 32 x 32
+--G.netG2:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
+--G.netG2:add(nn.Tanh())
+---- state size: (nc) x 64 x 64
+G.netG2=G.netG1::clone('weight','bias','gradWeight','gradBias')
 G.netG2:apply(weights_init)
 
 G.netI = nn.Sequential()
@@ -164,7 +163,7 @@ optimStateG = {
    beta1 = opt.beta1,
 }
 optimStateD = {
-   learningRate = opt.lr*0.1, -- hack to reduce the learning rate of the D
+   learningRate = opt.lr,
    beta1 = opt.beta1,
 }
 ----------------------------------------------------------------------------
