@@ -18,7 +18,7 @@ opt = {
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
    gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'experiment-investigate-att1-commonG',
+   name = 'mating-experiment1',
    noise = 'normal',       -- uniform / normal
 }
 
@@ -61,6 +61,7 @@ local SpatialConvolution = nn.SpatialConvolution
 local SpatialFullConvolution = nn.SpatialFullConvolution
 
 local G={}
+
 G.netG1 = nn.Sequential()
 -- input is Z, going into a convolution
 G.netG1:add(SpatialFullConvolution(nz, ngf * 8, 4, 4))
@@ -81,57 +82,27 @@ G.netG1:add(nn.Tanh())
 
 G.netG1:apply(weights_init)
 
+G.netG2 = nn.Sequential()
+-- input is Z, going into a convolution
+G.netG2:add(SpatialFullConvolution(nz, ngf * 8, 4, 4))
+G.netG2:add(SpatialBatchNormalization(ngf * 8)):add(nn.ReLU(true))
+-- state size: (ngf*8) x 4 x 4
+G.netG2:add(SpatialFullConvolution(ngf * 8, ngf * 4, 4, 4, 2, 2, 1, 1))
+G.netG2:add(SpatialBatchNormalization(ngf * 4)):add(nn.ReLU(true))
+-- state size: (ngf*4) x 8 x 8
+G.netG2:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
+G.netG2:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
+-- state size: (ngf*2) x 16 x 16
+G.netG2:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
+G.netG2:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
+-- state size: (ngf) x 32 x 32
+G.netG2:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
+G.netG2:add(nn.Tanh())
+-- state size: (nc) x 64 x 64
 
---G.netG2 = nn.Sequential()
----- input is Z, going into a convolution
---G.netG2:add(SpatialFullConvolution(nz, ngf * 8, 4, 4))
---G.netG2:add(SpatialBatchNormalization(ngf * 8)):add(nn.ReLU(true))
----- state size: (ngf*8) x 4 x 4
---G.netG2:add(SpatialFullConvolution(ngf * 8, ngf * 4, 4, 4, 2, 2, 1, 1))
---G.netG2:add(SpatialBatchNormalization(ngf * 4)):add(nn.ReLU(true))
----- state size: (ngf*4) x 8 x 8
---G.netG2:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
---G.netG2:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
----- state size: (ngf*2) x 16 x 16
---G.netG2:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
---G.netG2:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
----- state size: (ngf) x 32 x 32
---G.netG2:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
---G.netG2:add(nn.Tanh())
----- state size: (nc) x 64 x 64
-G.netG2=G.netG1::clone('weight','bias','gradWeight','gradBias')
 G.netG2:apply(weights_init)
 
-G.netI = nn.Sequential()
-
--- input is (nc) x 64 x 64
-G.netI:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
-G.netI:add(nn.LeakyReLU(0.2, true))
--- state size: (ndf) x 32 x 32
-G.netI:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
-G.netI:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*2) x 16 x 16
-G.netI:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
-G.netI:add(SpatialBatchNormalization(ndf * 4)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*4) x 8 x 8
-G.netI:add(SpatialConvolution(ndf * 4, ndf * 8, 4, 4, 2, 2, 1, 1))
-G.netI:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*8) x 4 x 4
-G.netI:add(SpatialConvolution(ndf * 8, 1, 4, 4))
-G.netI:add(nn.Sigmoid())
--- state size: 1 x 1 x 1
-G.netI:add(nn.View(1):setNumInputDims(3))
--- state size: 1
-
-G.netI:apply(weights_init)
-
-G.netI_clone=G.netI:clone('weight','bias','gradWeight','gradBias')
-
-G.netI_clone:apply(weights_init)
-
-G.softmax_I=nn.SoftMax()
-G.MM1=nn.MM()
-G.MM2=nn.MM()
+G.MM=nn.MM()
 
 local netD = nn.Sequential()
 
@@ -184,10 +155,10 @@ if opt.gpu > 0 then
       require 'cudnn'
       cudnn.benchmark = true
       --cudnn.convert(netG, cudnn)
-      for k,net in pairs(G) do cudnn.convert(net,cudnn)  end
+    for k,net in pairs(G) do cudnn.convert(net,cudnn)  end
       cudnn.convert(netD, cudnn)
    end
-   netD:cuda();           --netG:cuda();          
+   netD:cuda();           --netG:cuda();           
    criterion:cuda()
    for k,net in pairs(G) do net:cuda() end
 end
@@ -204,7 +175,11 @@ elseif opt.noise == 'normal' then
     noise_vis:normal(0, 1)
 end
 
-local input_att_softmax=torch.Tensor(2,opt.batchSize)
+local D_G1_out=torch.Tensor(opt.batchSize)
+local D_G2_out=torch.Tensor(opt.batchSize)
+local mul_df_dG1=torch.Tensor(opt.batchSize)
+local mul_df_dG2=torch.Tensor(opt.batchSize)
+
 -- create closure to evaluate f(X) and df/dX of discriminator
 local fDx = function(x)
    gradParametersD:zero()
@@ -227,105 +202,73 @@ local fDx = function(x)
    elseif opt.noise == 'normal' then
        noise:normal(0, 1)
    end
-   local fake1 = G.netG1:forward(noise)
-   local fake2 = G.netG2:forward(noise)
-
-   local att1 = G.netI:forward(fake1)
-   local att2 = G.netI_clone:forward(fake2)
-   local att12 = torch.cat(att1,att2,2)   -- size (batch_size , 2)
-  
-   local att12_softmax=G.softmax_I:forward(att12)
-   input_att_softmax=att12_softmax:transpose(1,2)
-   att1=att12_softmax:transpose(1,2)[1]
-   att2=att12_softmax:transpose(1,2)[2]
-   
-   fake1:resize(opt.batchSize,nc * 64 * 64,1)
-   fake2:resize(opt.batchSize,nc * 64 * 64,1)
-   
-   att1:resize(opt.batchSize,1,1)
-   att2:resize(opt.batchSize,1,1)
-
-   local fake1_att1=G.MM1:forward({fake1,att1})
-   local fake2_att2=G.MM2:forward({fake2,att2})
-
-
-   local fake=fake1_att1+fake2_att2
-   fake:resize(opt.batchSize,nc,64,64)
+   local fake = G.netG1:forward(noise)
    input:copy(fake)
    label:fill(fake_label)
 
    local output = netD:forward(input)
-   local errD_fake = criterion:forward(output, label)
+   local errD_fake1 = criterion:forward(output, label)
    local df_do = criterion:backward(output, label)
    netD:backward(input, df_do)
+   D_G1_out=output
 
-   errD = errD_real + errD_fake
+   local fake = G.netG2:forward(noise)
+   input:copy(fake)
+   label:fill(fake_label)
+
+   local output = netD:forward(input)
+   local errD_fake2 = criterion:forward(output, label)
+   local df_do = criterion:backward(output, label)
+   netD:backward(input, df_do)
+   D_G2_out=output
+
+   for k=1,opt.batchSize do
+      if D_G1_out[i]>D_G2_out[i] then
+         mul_df_dG1[i]=1
+         mul_df_dG2[i]=-1
+     else
+         mul_df_dG1[i]=-1
+         mul_df_dG2[i]=1
+      end
+
+   end
+
+   errD = errD_real + errD_fake1 + errD_fake2
 
    return errD, gradParametersD
 end
 
+
+
 -- create closure to evaluate f(X) and df/dX of generator
 local fGx = function(x)
    gradParametersG:zero()
+
    --[[ the three lines below were already executed in fDx, so save computation
    noise:uniform(-1, 1) -- regenerate random noise
    local fake = netG:forward(noise)
    input:copy(fake) ]]--
-   -- assuming all the required outputs have been precomputed in fDx
    label:fill(real_label) -- fake labels are real for generator cost
 
    local output = netD.output -- netD:forward(input) was already executed in fDx, so save computation
-   errG = criterion:forward(output, label)
+   local errG2 = criterion:forward(output, label)
    local df_do = criterion:backward(output, label)
+   local df_dg = netD:updateGradInput(G.netG2.output, df_do)
 
-   local df_dg = netD:updateGradInput(input, df_do)
+   local df_dg2=G.MM:forward({  df_dg:reshape(opt.batchSize,nc*64*64,1)  , mul_df_dG2:reshape(opt.batchSize,1,1)   })
+   G.netG2:backward(noise, df_dg2:reshape(opt.batchSize,nc,64,64))
 
-   local df_fake1_att1=G.MM1:backward({G.netG1.output:reshape(opt.batchSize,nc * 64 * 64,1), input_att_softmax[1]:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
-   
-   local df_fake2_att2=G.MM2:backward({G.netG2.output:reshape(opt.batchSize,nc * 64 * 64,1), input_att_softmax[2]:reshape(opt.batchSize,1,1) },df_dg:reshape(opt.batchSize,nc * 64 * 64,1))
+   local output = netD:forward(G.netG1.output)
+   local errG1 = criterion:forward(output,label)
+   local df_do = criterion:backward(output,label)
+   local df_dg = netD:updateGradInput(G.netG1.output,df_do)
 
-   local req_softmax=torch.cat(  df_fake1_att1[2]:reshape(opt.batchSize)  ,  df_fake2_att2[2]:reshape(opt.batchSize)   ,  2  )
-   local df_softmax=G.softmax_I:backward(input_att_softmax:transpose(1,2), req_softmax  ):transpose(1,2)
+   local df_dg1=G.MM:forward({  df_dg:reshape(opt.batchSize,nc*64*64,1)  , mul_df_dG1:reshape(opt.batchSize,1,1)   })
+   G.netG1:backward(noise, df_dg1:reshape(opt.batchSize,nc,64,64))
 
-   local df_dI = G.netI:backward(G.netG1.output:reshape(opt.batchSize,nc,64,64,1),df_softmax[1]:reshape(opt.batchSize))
-   local df_dI_clone = G.netI_clone:backward(G.netG2.output:reshape(opt.batchSize,nc,64,64,1),df_softmax[2]:reshape(opt.batchSize))
-   
-   df_dI:add(df_fake1_att1[1]:reshape(opt.batchSize,nc,64,64,1))
-   df_dI_clone:add(df_fake2_att2[1]:reshape(opt.batchSize,nc,64,64,1))
-
-   G.netG1:backward(noise,df_dI)
-   G.netG2:backward(noise,df_dI_clone)
-
+   errG=errG1+errG2
    return errG, gradParametersG
 end
-
-local function generate_samples(noise)
-   local fake1 = G.netG1:forward(noise)
-   local fake2 = G.netG2:forward(noise)
-
-   local att1 = G.netI:forward(fake1)
-   local att2 = G.netI_clone:forward(fake2)
-   local att12 = torch.cat(att1,att2,2)   -- size (batch_size , 2)
-  
-   local att12_softmax=G.softmax_I:forward(att12)
-   att1=att12_softmax:transpose(1,2)[1]
-   att2=att12_softmax:transpose(1,2)[2]
-   
-   fake1:resize(opt.batchSize,nc * 64 * 64,1)
-   fake2:resize(opt.batchSize,nc * 64 * 64,1)
-   
-   att1:resize(opt.batchSize,1,1)
-   att2:resize(opt.batchSize,1,1)
-
-   local fake1_att1=G.MM1:forward({fake1,att1})
-   local fake2_att2=G.MM2:forward({fake2,att2})
-
-
-   local fake=fake1_att1+fake2_att2
-   fake:resize(opt.batchSize,nc,64,64)
-   return fake
-end
-
 
 -- train
 for epoch = 1, opt.niter do
@@ -342,10 +285,12 @@ for epoch = 1, opt.niter do
       -- display
       counter = counter + 1
       if counter % 10 == 0 and opt.display then
-          local fake = generate_samples(noise_vis)
+          local fake1 = G.netG1:forward(noise_vis)
+          local fake2 = G.netG2:forward(noise_vis)
           local real = data:getBatch()
-          disp.image(fake, {win=opt.display_id, title=opt.name})
-          disp.image(real, {win=opt.display_id * 3, title=opt.name})
+          disp.image(fake1, {win=opt.display_id, title=opt.name})
+          disp.image(fake2, {win=opt.display_id * 3, title=opt.name})
+          disp.image(real, {win=opt.display_id * 9, title=opt.name})
       end
 
       -- logging
@@ -358,11 +303,11 @@ for epoch = 1, opt.niter do
                  errG and errG or -1, errD and errD or -1))
       end
    end
-   paths.mkdir('checkpoints_investigate_att_commonG')
+   paths.mkdir('mating-main-checkpoints')
    parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_investigate_att_commonG/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState(),G.netI:clearState() } )
-   torch.save('checkpoints_investigate_att_commonG/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
+   torch.save('mating-main-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState() } )
+   torch.save('mating-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
    parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()
    parametersG, gradParametersG = model_utils.combine_all_parameters(G)

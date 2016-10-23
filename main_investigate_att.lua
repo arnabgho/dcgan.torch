@@ -19,8 +19,8 @@ opt = {
    display_id = 10,        -- display window id.
    gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
    name = 'experiment-investigate-att1',
-   noise = 'normal',       -- uniform / normal
-   --noise='uniform',
+   --noise = 'normal',       -- uniform / normal
+   noise='uniform',
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -164,7 +164,7 @@ optimStateG = {
    beta1 = opt.beta1,
 }
 optimStateD = {
-   learningRate = opt.lr, -- hack to reduce the learning rate of the D
+   learningRate = opt.lr*0.5, -- hack to reduce the learning rate of the D
    beta1 = opt.beta1,
 }
 ----------------------------------------------------------------------------

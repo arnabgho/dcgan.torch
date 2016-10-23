@@ -18,7 +18,7 @@ opt = {
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
    gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'experiment-investigate-att1-commonG',
+   name = 'diff-noise-experiment-investigate-att1-commonG',
    noise = 'normal',       -- uniform / normal
 }
 
@@ -99,7 +99,7 @@ G.netG1:apply(weights_init)
 --G.netG2:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
 --G.netG2:add(nn.Tanh())
 ---- state size: (nc) x 64 x 64
-G.netG2=G.netG1::clone('weight','bias','gradWeight','gradBias')
+G.netG2=G.netG1:clone('weight','bias','gradWeight','gradBias')
 G.netG2:apply(weights_init)
 
 G.netI = nn.Sequential()
@@ -198,14 +198,14 @@ local parametersG, gradParametersG = model_utils.combine_all_parameters(G)
 
 if opt.display then disp = require 'display' end
 
-noise1_vis = noise1:clone()
-noise2_vis = noise2:clone()
+noise1vis = noise1:clone()
+noise2vis = noise2:clone()
 if opt.noise == 'uniform' then
-    noise1_vis:uniform(-1, 1)
-    noise2_vis:uniform(-1, 1)
+    noise1vis:uniform(-1, 1)
+    noise2vis:uniform(-1, 1)
 elseif opt.noise == 'normal' then
-    noise1_vis:normal(0, 1)
-    noise2_vis:normal(0, 1)
+    noise1vis:normal(0, 1)
+    noise2vis:normal(0, 1)
 end
 
 local input_att_softmax=torch.Tensor(2,opt.batchSize)
@@ -348,7 +348,7 @@ for epoch = 1, opt.niter do
       -- display
       counter = counter + 1
       if counter % 10 == 0 and opt.display then
-          local fake = generate_samples(noise_vis1,noise_vis2)
+          local fake = generate_samples(noise1vis,noise2vis)
           local real = data:getBatch()
           disp.image(fake, {win=opt.display_id, title=opt.name})
           disp.image(real, {win=opt.display_id * 3, title=opt.name})
@@ -364,11 +364,11 @@ for epoch = 1, opt.niter do
                  errG and errG or -1, errD and errD or -1))
       end
    end
-   paths.mkdir('checkpoints_investigate_att')
+   paths.mkdir('diff_noise_checkpoints_investigate_att_commonG')
    parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_investigate_att/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState(),G.netI:clearState() } )
-   torch.save('checkpoints_investigate_att/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
+   torch.save('diff_noise_checkpoints_investigate_att_commonG/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState(),G.netI:clearState() } )
+   torch.save('diff_noise_checkpoints_investigate_att_commonG/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
    parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()
    parametersG, gradParametersG = model_utils.combine_all_parameters(G)

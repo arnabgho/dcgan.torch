@@ -359,11 +359,11 @@ for epoch = 1, opt.niter do
                  errG and errG or -1, errD and errD or -1))
       end
    end
-   paths.mkdir('checkpoints_investigate_att')
+   paths.mkdir('checkpoints_investigate_att_commonD')
    parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_investigate_att/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState(),G.netI:clearState() } )
-   torch.save('checkpoints_investigate_att/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
+   torch.save('checkpoints_investigate_att_commonD/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState(),G.netI:clearState() } )
+   torch.save('checkpoints_investigate_att_commonD/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
    parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()
    parametersG, gradParametersG = model_utils.combine_all_parameters(G)
