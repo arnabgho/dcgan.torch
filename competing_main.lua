@@ -18,7 +18,7 @@ opt = {
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
    gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'mating-experiment1',
+   name = 'competing-experiment1',
    noise = 'normal',       -- uniform / normal
 }
 
@@ -102,7 +102,7 @@ G.netG2:add(nn.Tanh())
 
 G.netG2:apply(weights_init)
 
-G.MM=nn.MM()
+G.relu=nn.ReLU()
 
 local netD = nn.Sequential()
 
@@ -128,6 +128,7 @@ netD:add(nn.View(1):setNumInputDims(3))
 netD:apply(weights_init)
 
 local criterion = nn.BCECriterion()
+local compete_criterion = nn.AbsCriterion()
 ---------------------------------------------------------------------------
 optimStateG = {
    learningRate = opt.lr,
@@ -160,6 +161,7 @@ if opt.gpu > 0 then
    end
    netD:cuda();           --netG:cuda();           
    criterion:cuda()
+   compete_criterion:cuda()
    for k,net in pairs(G) do net:cuda() end
 end
 
@@ -177,10 +179,6 @@ end
 
 local D_G1_out=torch.Tensor(opt.batchSize)
 local D_G2_out=torch.Tensor(opt.batchSize)
-local mul_df_dG1=torch.Tensor(opt.batchSize)
-local mul_df_dG2=torch.Tensor(opt.batchSize)
-local num_G1_cor=0
-local num_G2_cor=0
 
 -- create closure to evaluate f(X) and df/dX of discriminator
 local fDx = function(x)
@@ -223,27 +221,13 @@ local fDx = function(x)
    local df_do = criterion:backward(output, label)
    netD:backward(input, df_do)
    D_G2_out=output
-   num_G1_cor=0; num_G2_cor=0
-   for i=1,opt.batchSize do
-      if D_G1_out[i][1]>D_G2_out[i][1] then
-         mul_df_dG1[i]=1
-         mul_df_dG2[i]=0
-         num_G1_cor=1+num_G1_cor
-     else
-         mul_df_dG1[i]=D_G1_out[i][1]
-         mul_df_dG2[i]=0
-         num_G2_cor=1+num_G2_cor
-      end
-
-   end
-
    errD = errD_real + errD_fake1 + errD_fake2
 
    return errD, gradParametersD
 end
 
 
-
+local zero_batch=torch.Tensor(opt.batchSize):zero()
 -- create closure to evaluate f(X) and df/dX of generator
 local fGx = function(x)
    gradParametersG:zero()
@@ -254,26 +238,22 @@ local fGx = function(x)
    input:copy(fake) ]]--
    label:fill(real_label) -- fake labels are real for generator cost
 
+   local diff_G1_G2= D_G1_out-D_G2_out
+   local relu_diff_G1_G2=G.relu:forward(diff_G1_G2)
    local output = netD.output -- netD:forward(input) was already executed in fDx, so save computation
-   local errG2 = criterion:forward(output, label)
-   local df_do = criterion:backward(output, label)
-   local df_dg = netD:updateGradInput(G.netG2.output, df_do)
+   local errG2 = criterion:forward(output, label) + compete_criterion:forward(relu_diff_G1_G2,zero_batch)
+   local df_do = criterion:backward(output, label) + G.relu:backward(diff_G1_G2,compete_criterion:backward(relu_diff_G1_G2,zero_batch))
+   local df_dg2 = netD:updateGradInput(G.netG2.output, df_do)
 
-   local df_dg2=G.MM:forward({  df_dg:reshape(opt.batchSize,nc*64*64,1)  , mul_df_dG2:reshape(opt.batchSize,1,1)   })
-   --if num_G2_cor ~=0 then
-   --    df_dg2:mul(opt.batchSize/num_G2_cor)
-   --end
    G.netG2:backward(noise, df_dg2:reshape(opt.batchSize,nc,64,64))
 
+   local diff_G2_G1= D_G2_out-D_G1_out
+   local relu_diff_G2_G1=G.relu:forward(diff_G2_G1)
    local output = netD:forward(G.netG1.output)
-   local errG1 = criterion:forward(output,label)
-   local df_do = criterion:backward(output,label)
-   local df_dg = netD:updateGradInput(G.netG1.output,df_do)
+   local errG1 = criterion:forward(output,label) + compete_criterion:forward(relu_diff_G2_G1,zero_batch)
+   local df_do = criterion:backward(output,label) +  G.relu:backward(diff_G2_G1 , compete_criterion:backward(relu_diff_G2_G1,zero_batch))
+   local df_dg1 = netD:updateGradInput(G.netG1.output,df_do)
 
-   local df_dg1=G.MM:forward({  df_dg:reshape(opt.batchSize,nc*64*64,1)  , mul_df_dG1:reshape(opt.batchSize,1,1)   })
-   --if num_G1_cor ~=0 then
-   --    df_dg2:mul(opt.batchSize/num_G1_cor)
-   --end
    G.netG1:backward(noise, df_dg1:reshape(opt.batchSize,nc,64,64))
 
    errG=errG1+errG2
@@ -313,11 +293,11 @@ for epoch = 1, opt.niter do
                  errG and errG or -1, errD and errD or -1))
       end
    end
-   paths.mkdir('mating-main-checkpoints')
+   paths.mkdir('competing-main-checkpoints')
    parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    parametersG, gradParametersG = nil, nil
-   torch.save('mating-main-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState() } )
-   torch.save('mating-main-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
+   torch.save('competing-main-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState() } )
+   torch.save('competing-main-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
    parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()
    parametersG, gradParametersG = model_utils.combine_all_parameters(G)
