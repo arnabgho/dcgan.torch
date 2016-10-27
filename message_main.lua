@@ -124,7 +124,7 @@ G.netI:add(SpatialConvolution(ndf * 8, nmsg, 4, 4))
 G.netI:add(SpatialBatchNormalization(nmsg))
 --G.netI:add(nn.Sigmoid())
 -- state size: nmsg x 1 x 1
-G.netI:add(nn.View(nmsg):setNumInputDims(3))
+--G.netI:add(nn.View(nmsg):setNumInputDims(3))
 -- state size: 1
 
 G.netI:apply(weights_init)
@@ -178,8 +178,8 @@ local errD, errG
 local epoch_tm = torch.Timer()
 local tm = torch.Timer()
 local data_tm = torch.Timer()
-local message_G1 = torch.Tensor(opt,batchSize,nmsg):normal(0,1)
-local message_G2 = torch.Tensor(opt.batchSize,nmsg):normal(0,1)
+local message_G1 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
+local message_G2 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
 local prev_fake1 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 local prev_fake2 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 
@@ -298,8 +298,8 @@ local fGx = function(x)
    local df_dG2_m1=df_input2[{ {} ,{nz-nmsg+1,nz}}]
    local df_dG1_m2=df_input1[{ {} ,{nz-nmsg+1,nz}}]
 
-   G.netI:backward( prev_fake1  , df_G2_m1 )
-   G.netI_clone:backward( prev_fake2 , df_G1_m2  )
+   G.netI:backward( prev_fake1  , df_dG2_m1 )
+   G.netI_clone:backward( prev_fake2 , df_dG1_m2  )
 
    message_G1= G.netI:forward(G.netG1.output)
    message_G2 = G.netI_clone:forward(G.netG2.output)
