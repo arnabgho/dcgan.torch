@@ -19,7 +19,7 @@ opt = {
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
    gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'experiment-message1',
+   name = 'experiment-diff_noise_message1',
    noise = 'normal',       -- uniform / normal
 }
 
@@ -172,7 +172,8 @@ optimStateD = {
 }
 ----------------------------------------------------------------------------
 local input = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
-local noise = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
+local noise1 = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
+local noise2 = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
 local label = torch.Tensor(opt.batchSize)
 local errD, errG
 local epoch_tm = torch.Timer()
@@ -187,7 +188,7 @@ local prev_fake2 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
-   input = input:cuda();  noise = noise:cuda();  label = label:cuda() ; message_G1=message_G1:cuda() ; message_G2 = message_G2:cuda()
+   input = input:cuda();  noise1 = noise1:cuda();  noise2 = noise2:cuda(); label = label:cuda() ; message_G1=message_G1:cuda() ; message_G2 = message_G2:cuda()
 
    if pcall(require, 'cudnn') then
       require 'cudnn'
@@ -208,11 +209,14 @@ local parametersG, gradParametersG = model_utils.combine_all_parameters(G)
 
 if opt.display then disp = require 'display' end
 
-noise_vis = noise:clone()
+noise_vis1 = noise1:clone()
+noise_vis2 = noise2:clone()
 if opt.noise == 'uniform' then
-    noise_vis:uniform(-1, 1)
+    noise_vis1:uniform(-1, 1)
+    noise_vis2:normal(0,1)
 elseif opt.noise == 'normal' then
-    noise_vis:normal(0, 1)
+    noise_vis1:normal(0, 1)
+    noise_vis2:uniform(-1,1)
 end
 
 ------- Forward Through the netI once initially as base case ----
@@ -239,12 +243,14 @@ local fDx = function(x)
 
    -- train with fake
    if opt.noise == 'uniform' then -- regenerate random noise
-       noise:uniform(-1, 1)
-   elseif opt.noise == 'normal' then
-       noise:normal(0, 1)
+       noise1:uniform(-1, 1)
+       noise2:normal(0,1)
+    elseif opt.noise == 'normal' then
+       noise1:normal(0, 1)
+       noise2:uniform(-1,1)
    end
-   local fake1 = G.netG1:forward(torch.cat(noise,message_G2,2))
-   local fake2 = G.netG2:forward(torch.cat(noise,message_G1,2))
+   local fake1 = G.netG1:forward(torch.cat(noise1,message_G2,2))
+   local fake2 = G.netG2:forward(torch.cat(noise2,message_G1,2))
 
    input:copy(fake1)
    label:fill(fake_label)
@@ -284,7 +290,7 @@ local fGx = function(x)
 
    local df_dg = netD:updateGradInput(G.netG2.output, df_do)
 
-   local df_input2= G.netG2:backward(torch.cat(noise,message_G1,2),df_dg)
+   local df_input2= G.netG2:backward(torch.cat(noise2,message_G1,2),df_dg)
 
    local output = netD:forward(G.netG1.output)
    local errG1 = criterion:forward(output,label)
@@ -292,7 +298,7 @@ local fGx = function(x)
 
    local df_dg = netD:updateGradInput(G.netG1.output,df_do)
 
-   local df_input1=G.netG1:backward(torch.cat(noise,message_G2,2),df_dg)
+   local df_input1=G.netG1:backward(torch.cat(noise1,message_G2,2),df_dg)
 
 
    local df_dG2_m1=df_input2[{ {} ,{nz-nmsg+1,nz}}]
@@ -326,8 +332,8 @@ for epoch = 1, opt.niter do
       -- display
       counter = counter + 1
       if counter % 10 == 0 and opt.display then
-          local fake1 = G.netG1:forward(torch.cat(noise,message_G2,2))
-          local fake2 = G.netG2:forward(torch.cat(noise,message_G1,2))
+          local fake1 = G.netG1:forward(torch.cat(noise_vis1,message_G2,2))
+          local fake2 = G.netG2:forward(torch.cat(noise_vis2,message_G1,2))
           local real = data:getBatch()
           disp.image(fake1, {win=opt.display_id, title=opt.name})
           disp.image(fake2, {win=opt.display_id * 3, title=opt.name})
@@ -344,11 +350,11 @@ for epoch = 1, opt.niter do
                  errG and errG or -1, errD and errD or -1))
       end
    end
-   paths.mkdir('checkpoints_message')
+   paths.mkdir('checkpoints_diff_noise_message')
    --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    --parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_message/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
-   torch.save('checkpoints_message/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+   torch.save('checkpoints_diff_noise_message/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
+   torch.save('checkpoints_diff_noise_message/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
    --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()
    --parametersG, gradParametersG = model_utils.combine_all_parameters(G)
