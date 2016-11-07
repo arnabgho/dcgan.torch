@@ -19,7 +19,7 @@ opt = {
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
    gpu = 1,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'experiment-diff_noise_message1',
+   name = 'experiment-diff_noise_message_conditioned1',
    noise = 'normal',       -- uniform / normal
 }
 
@@ -133,9 +133,14 @@ G.netI_clone=G.netI:clone('weight','bias','gradWeight','gradBias')
 
 G.netI_clone:apply(weights_init)
 
-G.softmax_I=nn.SoftMax()
-G.MM1=nn.MM()
-G.MM2=nn.MM()
+G.netM = nn.Sequential()
+G.netM:add(nn.Linear((nz-nmsg)+nmsg+nmsg,nmsg))
+
+G.netM:apply(weights_init)
+
+G.netM_clone=G.netM:clone('weight','bias','gradWeight','gradBias')
+
+G.netM_clone:apply(weights_init)
 
 local netD = nn.Sequential()
 
@@ -183,12 +188,16 @@ local message_G1 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
 local message_G2 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
 local prev_fake1 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 local prev_fake2 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
+local provisional_message_G1 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
+local provisional_message_G2 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
+local temp_message_G1 = torch.Tensor(opt.batchSize,nmsg):normal(0,1)
+local temp_message_G2 = torch.Tensor(opt.batchSize,nmsg):normal(0,1)
 
 ----------------------------------------------------------------------------
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
-   input = input:cuda();  noise1 = noise1:cuda();  noise2 = noise2:cuda(); label = label:cuda() ; message_G1=message_G1:cuda() ; message_G2 = message_G2:cuda() ; prev_fake1 = prev_fake1:cuda() ; prev_fake2=prev_fake2:cuda()
+   input = input:cuda();  noise1 = noise1:cuda();  noise2 = noise2:cuda(); label = label:cuda() ; message_G1=message_G1:cuda() ; message_G2 = message_G2:cuda() ; prev_fake1 = prev_fake1:cuda() ; prev_fake2=prev_fake2:cuda() ; provisional_message_G1:cuda(); provisional_message_G2:cuda();temp_message_G1:cuda();temp_message_G2:cuda()
 
 --   if pcall(require, 'cudnn') then
 --      require 'cudnn'
@@ -222,6 +231,9 @@ end
 ------- Forward Through the netI once initially as base case ----
 G.netI:forward(prev_fake1)
 G.netI_clone:forward(prev_fake2)
+G.netM:forward( torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,1 )  )
+G.netM_clone:forward( torch.cat({provisional_message_G2:reshape(opt.batchSize,msg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,1 )  )
+
 ----------------------------------------------------------------
 
 
@@ -304,12 +316,25 @@ local fGx = function(x)
    local df_dG2_m1=df_input2[{ {} ,{nz-nmsg+1,nz}}]
    local df_dG1_m2=df_input1[{ {} ,{nz-nmsg+1,nz}}]
 
-   G.netI:backward( prev_fake1  , df_dG2_m1 )
-   G.netI_clone:backward( prev_fake2 , df_dG1_m2  )
+   local df_dM1 =  G.netM:backward(  torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,1 ) , df_dG2_m1:reshape(opt.batchSize,nmsg))
 
-   message_G1= G.netI:forward(G.netG1.output)
-   message_G2 = G.netI_clone:forward(G.netG2.output)
+   local df_dM2 = G.netM_clone:backward( torch.cat({provisional_message_G2:reshape(opt.batchSize,msg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,1 ) , df_dG1_m2:reshape(opt.batchSize,nmsg))
 
+   local df_dI1 = df_dM1[ { {} , { 1 , nmsg  } }]:reshape(opt.batchSize,nmsg,1,1)
+   local df_dI2 = df_dM2[ { {} , { 1 , nmsg  } }]:reshape(opt.batchSize,nmsg,1,1)
+
+
+   G.netI:backward( prev_fake1  , df_dI1 )
+   G.netI_clone:backward( prev_fake2 , df_dI2  )
+
+   provisional_message_G1= G.netI:forward(G.netG1.output)
+   provisional_message_G2 = G.netI_clone:forward(G.netG2.output)
+
+   temp_message_G1 = G.netM:forward( torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,1 )  )
+   temp_message_G2 = G.netM_clone:forward( torch.cat({provisional_message_G2:reshape(opt.batchSize,msg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,1 )  )
+
+   message_G1=temp_message_G1:reshape(opt.batchSize,nmsg,1,1)
+   message_G2=temp_message_G2:reshape(opt.batchSize,nmsg,1,1)
    prev_fake1 = G.netG1.output
    prev_fake2 = G.netG2.output
    errG=errG1+errG2
@@ -350,11 +375,11 @@ for epoch = 1, opt.niter do
                  errG and errG or -1, errD and errD or -1))
       end
    end
-   paths.mkdir('checkpoints_diff_noise_message')
+   paths.mkdir('checkpoints_diff_noise_message_conditioned')
    --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    --parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_diff_noise_message/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
-   torch.save('checkpoints_diff_noise_message/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+   torch.save('checkpoints_diff_noise_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
+   torch.save('checkpoints_diff_noise_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
    --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()
    --parametersG, gradParametersG = model_utils.combine_all_parameters(G)
