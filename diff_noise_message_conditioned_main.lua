@@ -135,6 +135,7 @@ G.netI_clone:apply(weights_init)
 
 G.netM = nn.Sequential()
 G.netM:add(nn.Linear((nz-nmsg)+nmsg+nmsg,nmsg))
+G.netM:add(nn.BatchNormalization(nmsg))
 
 G.netM:apply(weights_init)
 
