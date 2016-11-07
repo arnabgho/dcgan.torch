@@ -191,14 +191,11 @@ local prev_fake1 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 local prev_fake2 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 local provisional_message_G1 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
 local provisional_message_G2 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local temp_message_G1 = torch.Tensor(opt.batchSize,nmsg):normal(0,1)
-local temp_message_G2 = torch.Tensor(opt.batchSize,nmsg):normal(0,1)
-
 ----------------------------------------------------------------------------
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
-   input = input:cuda();  noise1 = noise1:cuda();  noise2 = noise2:cuda(); label = label:cuda() ; message_G1=message_G1:cuda() ; message_G2 = message_G2:cuda() ; prev_fake1 = prev_fake1:cuda() ; prev_fake2=prev_fake2:cuda() ; provisional_message_G1:cuda(); provisional_message_G2:cuda();temp_message_G1:cuda();temp_message_G2:cuda()
+   input = input:cuda();  noise1 = noise1:cuda();  noise2 = noise2:cuda(); label = label:cuda() ; message_G1=message_G1:cuda() ; message_G2 = message_G2:cuda() ; prev_fake1 = prev_fake1:cuda() ; prev_fake2=prev_fake2:cuda() ; provisional_message_G1=provisional_message_G1:cuda();provisional_message_G2=provisional_message_G2:cuda()
 
 --   if pcall(require, 'cudnn') then
 --      require 'cudnn'
@@ -232,8 +229,8 @@ end
 ------- Forward Through the netI once initially as base case ----
 G.netI:forward(prev_fake1)
 G.netI_clone:forward(prev_fake2)
-G.netM:forward( torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,1 )  )
-G.netM_clone:forward( torch.cat({provisional_message_G2:reshape(opt.batchSize,msg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,1 )  )
+G.netM:forward( torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,2 )  )
+G.netM_clone:forward( torch.cat({provisional_message_G2:reshape(opt.batchSize,nmsg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,2 )  )
 
 ----------------------------------------------------------------
 
@@ -317,9 +314,9 @@ local fGx = function(x)
    local df_dG2_m1=df_input2[{ {} ,{nz-nmsg+1,nz}}]
    local df_dG1_m2=df_input1[{ {} ,{nz-nmsg+1,nz}}]
 
-   local df_dM1 =  G.netM:backward(  torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,1 ) , df_dG2_m1:reshape(opt.batchSize,nmsg))
+   local df_dM1 =  G.netM:backward(  torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,2 ) , df_dG2_m1:reshape(opt.batchSize,nmsg))
 
-   local df_dM2 = G.netM_clone:backward( torch.cat({provisional_message_G2:reshape(opt.batchSize,msg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,1 ) , df_dG1_m2:reshape(opt.batchSize,nmsg))
+   local df_dM2 = G.netM_clone:backward( torch.cat({provisional_message_G2:reshape(opt.batchSize,nmsg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,2 ) , df_dG1_m2:reshape(opt.batchSize,nmsg))
 
    local df_dI1 = df_dM1[ { {} , { 1 , nmsg  } }]:reshape(opt.batchSize,nmsg,1,1)
    local df_dI2 = df_dM2[ { {} , { 1 , nmsg  } }]:reshape(opt.batchSize,nmsg,1,1)
@@ -331,8 +328,8 @@ local fGx = function(x)
    provisional_message_G1= G.netI:forward(G.netG1.output)
    provisional_message_G2 = G.netI_clone:forward(G.netG2.output)
 
-   temp_message_G1 = G.netM:forward( torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,1 )  )
-   temp_message_G2 = G.netM_clone:forward( torch.cat({provisional_message_G2:reshape(opt.batchSize,msg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,1 )  )
+   local temp_message_G1 = G.netM:forward( torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,2 )  )
+   local temp_message_G2 = G.netM_clone:forward( torch.cat({provisional_message_G2:reshape(opt.batchSize,nmsg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,2 )  )
 
    message_G1=temp_message_G1:reshape(opt.batchSize,nmsg,1,1)
    message_G2=temp_message_G2:reshape(opt.batchSize,nmsg,1,1)
