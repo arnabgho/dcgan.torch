@@ -17,11 +17,10 @@ opt = {
    beta1 = 0.5,            -- momentum term of adam
    ntrain = math.huge,     -- #  of examples per epoch. math.huge for full dataset
    display = 1,            -- display samples while training. 0 = false
-   display_id = 10,        -- display window id.
+   display_id = 20,        -- display window id.
    gpu = 1,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'experiment-diff_noise_message_conditioned1',
+   name = 'experiment-competing-message_conditioned1',
    noise = 'normal',       -- uniform / normal
-   eps=0.001,	           -- epsilon to visualize noise
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -58,7 +57,7 @@ local ngf = opt.ngf
 local real_label = 1
 local fake_label = 0
 local nmsg = opt.nmsg
-local eps=opt.eps
+
 local SpatialBatchNormalization = nn.SpatialBatchNormalization
 local SpatialConvolution = nn.SpatialConvolution
 local SpatialFullConvolution = nn.SpatialFullConvolution
@@ -144,6 +143,8 @@ G.netM_clone=G.netM:clone('weight','bias','gradWeight','gradBias')
 
 G.netM_clone:apply(weights_init)
 
+G.relu=nn.ReLU()
+
 local netD = nn.Sequential()
 
 -- input is (nc) x 64 x 64
@@ -168,6 +169,7 @@ netD:add(nn.View(1):setNumInputDims(3))
 netD:apply(weights_init)
 
 local criterion = nn.BCECriterion()
+local compete_criterion = nn.AbsCriterion()
 ---------------------------------------------------------------------------
 optimStateG = {
    learningRate = opt.lr,
@@ -181,8 +183,6 @@ optimStateD = {
 local input = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 local noise1 = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
 local noise2 = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
-local m_noise1 = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
-local m_noise2 = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
 local label = torch.Tensor(opt.batchSize)
 local errD, errG
 local epoch_tm = torch.Timer()
@@ -194,12 +194,16 @@ local prev_fake1 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 local prev_fake2 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 local provisional_message_G1 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
 local provisional_message_G2 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
+local zero_batch=torch.Tensor(opt.batchSize):zero()
+local D_G1_out=torch.Tensor(opt.batchSize)
+local D_G2_out=torch.Tensor(opt.batchSize)
+
+
 ----------------------------------------------------------------------------
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
-   input = input:cuda();  noise1 = noise1:cuda();  noise2 = noise2:cuda(); label = label:cuda() ; message_G1=message_G1:cuda() ; message_G2 = message_G2:cuda() ; prev_fake1 = prev_fake1:cuda() ; prev_fake2=prev_fake2:cuda() ; provisional_message_G1=provisional_message_G1:cuda();provisional_message_G2=provisional_message_G2:cuda() ; m_noise1=m_noise1:cuda() ;
-m_noise2=m_noise2:cuda()
+   input = input:cuda();  noise1 = noise1:cuda();  noise2 = noise2:cuda(); label = label:cuda() ; message_G1=message_G1:cuda() ; message_G2 = message_G2:cuda() ; prev_fake1 = prev_fake1:cuda() ; prev_fake2=prev_fake2:cuda() ; provisional_message_G1=provisional_message_G1:cuda();provisional_message_G2=provisional_message_G2:cuda();zero_batch=zero_batch:cuda();D_G1_out=D_G1_out:cuda();D_G2_out=D_G2_out:cuda()
 
 --   if pcall(require, 'cudnn') then
 --      require 'cudnn'
@@ -210,6 +214,7 @@ m_noise2=m_noise2:cuda()
 --   end
    netD:cuda();           --netG:cuda();          
    criterion:cuda()
+   compete_criterion:cuda()
    for k,net in pairs(G) do net:cuda() end
 end
 
@@ -224,10 +229,10 @@ noise_vis1 = noise1:clone()
 noise_vis2 = noise2:clone()
 if opt.noise == 'uniform' then
     noise_vis1:uniform(-1, 1)
-    noise_vis2:normal(0,1)
+    noise_vis2:uniform(0,1)
 elseif opt.noise == 'normal' then
     noise_vis1:normal(0, 1)
-    noise_vis2:uniform(-1,1)
+    noise_vis2:normal(-1,1)
 end
 
 ------- Forward Through the netI once initially as base case ----
@@ -258,10 +263,10 @@ local fDx = function(x)
    -- train with fake
    if opt.noise == 'uniform' then -- regenerate random noise
        noise1:uniform(-1, 1)
-       noise2:normal(0,1)
+       noise2:uniform(-1,1)
     elseif opt.noise == 'normal' then
        noise1:normal(0, 1)
-       noise2:uniform(-1,1)
+       noise2:normal(0,1)
    end
    local fake1 = G.netG1:forward(torch.cat(noise1,message_G2,2))
    local fake2 = G.netG2:forward(torch.cat(noise2,message_G1,2))
@@ -273,6 +278,7 @@ local fDx = function(x)
    local errD_fake1 = criterion:forward(output, label)
    local df_do = criterion:backward(output, label)
    netD:backward(input, df_do)
+   D_G1_out=output   
 
    input:copy(fake2)
    label:fill(fake_label)
@@ -281,7 +287,7 @@ local fDx = function(x)
    local errD_fake2 = criterion:forward(output, label)
    local df_do = criterion:backward(output, label)
    netD:backward(input, df_do)
-
+   D_G2_out=output
 
    errD = errD_real + errD_fake1 + errD_fake2
 
@@ -298,17 +304,24 @@ local fGx = function(x)
    -- assuming all the required outputs have been precomputed in fDx
    label:fill(real_label) -- fake labels are real for generator cost
 
+   local diff_G1_G2= D_G1_out-D_G2_out
+   local relu_diff_G1_G2=G.relu:forward(diff_G1_G2) 
    local output = netD.output -- netD:forward(input) was already executed in fDx, so save computation
-   local errG2 = criterion:forward(output, label)
-   local df_do = criterion:backward(output, label)
+   local errG2 = criterion:forward(output, label) + compete_criterion:forward(relu_diff_G1_G2,zero_batch)
+   local df_do = criterion:backward(output, label) + G.relu:backward(diff_G1_G2,compete_criterion:backward(relu_diff_G1_G2,zero_batch))
+
 
    local df_dg = netD:updateGradInput(G.netG2.output, df_do)
 
    local df_input2= G.netG2:backward(torch.cat(noise2,message_G1,2),df_dg)
 
+   local diff_G2_G1= D_G2_out-D_G1_out
+   local relu_diff_G2_G1=G.relu:forward(diff_G2_G1)
    local output = netD:forward(G.netG1.output)
-   local errG1 = criterion:forward(output,label)
-   local df_do = criterion:backward(output,label)
+   local errG1 = criterion:forward(output,label) + compete_criterion:forward(relu_diff_G2_G1,zero_batch)
+
+   local df_do = criterion:backward(output,label)+ G.relu:backward(diff_G2_G1 , compete_criterion:backward(relu_diff_G2_G1,zero_batch))
+
 
    local df_dg = netD:updateGradInput(G.netG1.output,df_do)
 
@@ -362,15 +375,9 @@ for epoch = 1, opt.niter do
           local fake1 = G.netG1:forward(torch.cat(noise_vis1,message_G2,2))
           local fake2 = G.netG2:forward(torch.cat(noise_vis2,message_G1,2))
           local real = data:getBatch()
-          m_noise1=message_G2     --zero()         -- :normal(0,eps)
-          m_noise2=message_G1     --zero()               -- :normal(0,eps)      
-	  local mess_vis1 = G.netG1:forward( torch.cat(m_noise1,message_G2,2))
-          local mess_vis2 = G.netG2:forward( torch.cat(m_noise2,message_G1,2))
-	  disp.image(fake1, {win=opt.display_id, title=opt.name})
-          disp.image(fake2, {win=opt.display_id +1, title=opt.name})
-          disp.image(real,  {win=opt.display_id +2, title=opt.name})
-          disp.image(mess_vis1,  {win=opt.display_id +3, title=opt.name.."_vis_message"})
-          disp.image(mess_vis2,  {win=opt.display_id +4, title=opt.name.."_vis_message"})
+          disp.image(fake1, {win=opt.display_id, title=opt.name})
+          disp.image(fake2, {win=opt.display_id * 3, title=opt.name})
+          disp.image(real,  {win=opt.display_id*9 , title=opt.name})
       end
 
       -- logging
@@ -383,11 +390,11 @@ for epoch = 1, opt.niter do
                  errG and errG or -1, errD and errD or -1))
       end
    end
-   paths.mkdir('checkpoints_diff_noise_message_conditioned')
+   paths.mkdir('checkpoints_competing_message_conditioned')
    --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    --parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_diff_noise_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
-   torch.save('checkpoints_diff_noise_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+   torch.save('checkpoints_competing_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
+   torch.save('checkpoints_competing_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
    --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()
    --parametersG, gradParametersG = model_utils.combine_all_parameters(G)

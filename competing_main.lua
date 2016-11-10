@@ -16,8 +16,8 @@ opt = {
    beta1 = 0.5,            -- momentum term of adam
    ntrain = math.huge,     -- #  of examples per epoch. math.huge for full dataset
    display = 1,            -- display samples while training. 0 = false
-   display_id = 10,        -- display window id.
-   gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
+   display_id = 20,        -- display window id.
+   gpu = 1,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
    name = 'competing-experiment1',
    noise = 'normal',       -- uniform / normal
 }
@@ -146,19 +146,23 @@ local errD, errG
 local epoch_tm = torch.Timer()
 local tm = torch.Timer()
 local data_tm = torch.Timer()
+local zero_batch=torch.Tensor(opt.batchSize):zero()
+local D_G1_out=torch.Tensor(opt.batchSize)
+local D_G2_out=torch.Tensor(opt.batchSize)
+
 ----------------------------------------------------------------------------
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
-   input = input:cuda();  noise = noise:cuda();  label = label:cuda()
+   input = input:cuda();  noise = noise:cuda();  label = label:cuda() ; zero_batch=zero_batch:cuda(); D_G1_out=D_G1_out:cuda(); D_G2_out=D_G2_out:cuda()
 
-   if pcall(require, 'cudnn') then
-      require 'cudnn'
-      cudnn.benchmark = true
-      --cudnn.convert(netG, cudnn)
-    for k,net in pairs(G) do cudnn.convert(net,cudnn)  end
-      cudnn.convert(netD, cudnn)
-   end
+   --if pcall(require, 'cudnn') then
+   --   require 'cudnn'
+   --   cudnn.benchmark = true
+   --   --cudnn.convert(netG, cudnn)
+   -- for k,net in pairs(G) do cudnn.convert(net,cudnn)  end
+   --   cudnn.convert(netD, cudnn)
+   --end
    netD:cuda();           --netG:cuda();           
    criterion:cuda()
    compete_criterion:cuda()
@@ -176,9 +180,6 @@ if opt.noise == 'uniform' then
 elseif opt.noise == 'normal' then
     noise_vis:normal(0, 1)
 end
-
-local D_G1_out=torch.Tensor(opt.batchSize)
-local D_G2_out=torch.Tensor(opt.batchSize)
 
 -- create closure to evaluate f(X) and df/dX of discriminator
 local fDx = function(x)
@@ -227,7 +228,6 @@ local fDx = function(x)
 end
 
 
-local zero_batch=torch.Tensor(opt.batchSize):zero()
 -- create closure to evaluate f(X) and df/dX of generator
 local fGx = function(x)
    gradParametersG:zero()
