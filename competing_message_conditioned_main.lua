@@ -229,10 +229,10 @@ noise_vis1 = noise1:clone()
 noise_vis2 = noise2:clone()
 if opt.noise == 'uniform' then
     noise_vis1:uniform(-1, 1)
-    noise_vis2:uniform(0,1)
+    noise_vis2:uniform(-1,1)
 elseif opt.noise == 'normal' then
     noise_vis1:normal(0, 1)
-    noise_vis2:normal(-1,1)
+    noise_vis2:normal(0,1)
 end
 
 ------- Forward Through the netI once initially as base case ----

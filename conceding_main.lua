@@ -7,7 +7,6 @@ opt = {
    batchSize = 64,
    loadSize = 96,
    fineSize = 64,
-   nmsg = 50,              -- #  of dim for the message
    nz = 100,               -- #  of dim for Z
    ngf = 64,               -- #  of gen filters in first conv layer
    ndf = 64,               -- #  of discrim filters in first conv layer
@@ -17,9 +16,9 @@ opt = {
    beta1 = 0.5,            -- momentum term of adam
    ntrain = math.huge,     -- #  of examples per epoch. math.huge for full dataset
    display = 1,            -- display samples while training. 0 = false
-   display_id = 10,        -- display window id.
+   display_id = 20,        -- display window id.
    gpu = 1,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'experiment-message1',
+   name = 'conceding-experiment1',
    noise = 'normal',       -- uniform / normal
 }
 
@@ -56,14 +55,13 @@ local ndf = opt.ndf
 local ngf = opt.ngf
 local real_label = 1
 local fake_label = 0
-local nmsg = opt.nmsg
 
 local SpatialBatchNormalization = nn.SpatialBatchNormalization
 local SpatialConvolution = nn.SpatialConvolution
 local SpatialFullConvolution = nn.SpatialFullConvolution
 
-
 local G={}
+
 G.netG1 = nn.Sequential()
 -- input is Z, going into a convolution
 G.netG1:add(SpatialFullConvolution(nz, ngf * 8, 4, 4))
@@ -83,7 +81,6 @@ G.netG1:add(nn.Tanh())
 -- state size: (nc) x 64 x 64
 
 G.netG1:apply(weights_init)
-
 
 G.netG2 = nn.Sequential()
 -- input is Z, going into a convolution
@@ -105,37 +102,7 @@ G.netG2:add(nn.Tanh())
 
 G.netG2:apply(weights_init)
 
-G.netI = nn.Sequential()
-
--- input is (nc) x 64 x 64
-G.netI:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
-G.netI:add(nn.LeakyReLU(0.2, true))
--- state size: (ndf) x 32 x 32
-G.netI:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
-G.netI:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*2) x 16 x 16
-G.netI:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
-G.netI:add(SpatialBatchNormalization(ndf * 4)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*4) x 8 x 8
-G.netI:add(SpatialConvolution(ndf * 4, ndf * 8, 4, 4, 2, 2, 1, 1))
-G.netI:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*8) x 4 x 4
-G.netI:add(SpatialConvolution(ndf * 8, nmsg, 4, 4))
-G.netI:add(SpatialBatchNormalization(nmsg))
---G.netI:add(nn.Sigmoid())
--- state size: nmsg x 1 x 1
---G.netI:add(nn.View(nmsg):setNumInputDims(3))
--- state size: 1
-
-G.netI:apply(weights_init)
-
-G.netI_clone=G.netI:clone('weight','bias','gradWeight','gradBias')
-
-G.netI_clone:apply(weights_init)
-
-G.softmax_I=nn.SoftMax()
-G.MM1=nn.MM()
-G.MM2=nn.MM()
+G.relu=nn.ReLU()
 
 local netD = nn.Sequential()
 
@@ -161,6 +128,7 @@ netD:add(nn.View(1):setNumInputDims(3))
 netD:apply(weights_init)
 
 local criterion = nn.BCECriterion()
+local compete_criterion = nn.AbsCriterion()
 ---------------------------------------------------------------------------
 optimStateG = {
    learningRate = opt.lr,
@@ -172,36 +140,34 @@ optimStateD = {
 }
 ----------------------------------------------------------------------------
 local input = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
-local noise = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
+local noise = torch.Tensor(opt.batchSize, nz, 1, 1)
 local label = torch.Tensor(opt.batchSize)
 local errD, errG
 local epoch_tm = torch.Timer()
 local tm = torch.Timer()
 local data_tm = torch.Timer()
-local message_G1 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local message_G2 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local prev_fake1 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
-local prev_fake2 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
+local zero_batch=torch.Tensor(opt.batchSize):zero()
+local D_G1_out=torch.Tensor(opt.batchSize)
+local D_G2_out=torch.Tensor(opt.batchSize)
 
 ----------------------------------------------------------------------------
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
-   input = input:cuda();  noise = noise:cuda();  label = label:cuda() ; message_G1=message_G1:cuda() ; message_G2 = message_G2:cuda()
+   input = input:cuda();  noise = noise:cuda();  label = label:cuda() ; zero_batch=zero_batch:cuda(); D_G1_out=D_G1_out:cuda(); D_G2_out=D_G2_out:cuda()
 
---   if pcall(require, 'cudnn') then
---      require 'cudnn'
---      cudnn.benchmark = true
---      --cudnn.convert(netG, cudnn)
---      for k,net in pairs(G) do cudnn.convert(net,cudnn)  end
---      cudnn.convert(netD, cudnn)
---   end
-   netD:cuda();           --netG:cuda();          
+   --if pcall(require, 'cudnn') then
+   --   require 'cudnn'
+   --   cudnn.benchmark = true
+   --   --cudnn.convert(netG, cudnn)
+   -- for k,net in pairs(G) do cudnn.convert(net,cudnn)  end
+   --   cudnn.convert(netD, cudnn)
+   --end
+   netD:cuda();           --netG:cuda();           
    criterion:cuda()
+   compete_criterion:cuda()
    for k,net in pairs(G) do net:cuda() end
 end
-
-
 
 local parametersD, gradParametersD = netD:getParameters()
 local parametersG, gradParametersG = model_utils.combine_all_parameters(G)
@@ -214,12 +180,6 @@ if opt.noise == 'uniform' then
 elseif opt.noise == 'normal' then
     noise_vis:normal(0, 1)
 end
-
-------- Forward Through the netI once initially as base case ----
-G.netI:forward(prev_fake1)
-G.netI_clone:forward(prev_fake2)
-----------------------------------------------------------------
-
 
 -- create closure to evaluate f(X) and df/dX of discriminator
 local fDx = function(x)
@@ -243,73 +203,62 @@ local fDx = function(x)
    elseif opt.noise == 'normal' then
        noise:normal(0, 1)
    end
-   local fake1 = G.netG1:forward(torch.cat(noise,message_G2,2))
-   local fake2 = G.netG2:forward(torch.cat(noise,message_G1,2))
-
-   input:copy(fake1)
+   local fake = G.netG1:forward(noise)
+   input:copy(fake)
    label:fill(fake_label)
 
    local output = netD:forward(input)
    local errD_fake1 = criterion:forward(output, label)
    local df_do = criterion:backward(output, label)
    netD:backward(input, df_do)
+   D_G1_out=output
 
-   input:copy(fake2)
+   local fake = G.netG2:forward(noise)
+   input:copy(fake)
    label:fill(fake_label)
 
    local output = netD:forward(input)
    local errD_fake2 = criterion:forward(output, label)
    local df_do = criterion:backward(output, label)
    netD:backward(input, df_do)
-
-
+   D_G2_out=output
    errD = errD_real + errD_fake1 + errD_fake2
 
    return errD, gradParametersD
 end
 
+
 -- create closure to evaluate f(X) and df/dX of generator
 local fGx = function(x)
    gradParametersG:zero()
+
    --[[ the three lines below were already executed in fDx, so save computation
    noise:uniform(-1, 1) -- regenerate random noise
    local fake = netG:forward(noise)
    input:copy(fake) ]]--
-   -- assuming all the required outputs have been precomputed in fDx
    label:fill(real_label) -- fake labels are real for generator cost
 
+   local diff_G1_G2= D_G2_out-D_G1_out
+   local relu_diff_G1_G2=G.relu:forward(diff_G1_G2)
    local output = netD.output -- netD:forward(input) was already executed in fDx, so save computation
-   local errG2 = criterion:forward(output, label)
-   local df_do = criterion:backward(output, label)
+   local errG2 = criterion:forward(output, label) + compete_criterion:forward(relu_diff_G1_G2,zero_batch)
+   local df_do = criterion:backward(output, label) + G.relu:backward(diff_G1_G2,compete_criterion:backward(relu_diff_G1_G2,zero_batch))
+   local df_dg2 = netD:updateGradInput(G.netG2.output, df_do)
 
-   local df_dg = netD:updateGradInput(G.netG2.output, df_do)
+   G.netG2:backward(noise, df_dg2:reshape(opt.batchSize,nc,64,64))
 
-   local df_input2= G.netG2:backward(torch.cat(noise,message_G1,2),df_dg)
-
+   local diff_G2_G1= D_G1_out-D_G2_out
+   local relu_diff_G2_G1=G.relu:forward(diff_G2_G1)
    local output = netD:forward(G.netG1.output)
-   local errG1 = criterion:forward(output,label)
-   local df_do = criterion:backward(output,label)
+   local errG1 = criterion:forward(output,label) + compete_criterion:forward(relu_diff_G2_G1,zero_batch)
+   local df_do = criterion:backward(output,label) +  G.relu:backward(diff_G2_G1 , compete_criterion:backward(relu_diff_G2_G1,zero_batch))
+   local df_dg1 = netD:updateGradInput(G.netG1.output,df_do)
 
-   local df_dg = netD:updateGradInput(G.netG1.output,df_do)
+   G.netG1:backward(noise, df_dg1:reshape(opt.batchSize,nc,64,64))
 
-   local df_input1=G.netG1:backward(torch.cat(noise,message_G2,2),df_dg)
-
-
-   local df_dG2_m1=df_input2[{ {} ,{nz-nmsg+1,nz}}]
-   local df_dG1_m2=df_input1[{ {} ,{nz-nmsg+1,nz}}]
-
-   G.netI:backward( prev_fake1  , df_dG2_m1 )
-   G.netI_clone:backward( prev_fake2 , df_dG1_m2  )
-
-   message_G1= G.netI:forward(G.netG1.output)
-   message_G2 = G.netI_clone:forward(G.netG2.output)
-
-   prev_fake1 = G.netG1.output
-   prev_fake2 = G.netG2.output
    errG=errG1+errG2
    return errG, gradParametersG
 end
-
 
 -- train
 for epoch = 1, opt.niter do
@@ -326,12 +275,12 @@ for epoch = 1, opt.niter do
       -- display
       counter = counter + 1
       if counter % 10 == 0 and opt.display then
-          local fake1 = G.netG1:forward(torch.cat(noise,message_G2,2))
-          local fake2 = G.netG2:forward(torch.cat(noise,message_G1,2))
+          local fake1 = G.netG1:forward(noise_vis)
+          local fake2 = G.netG2:forward(noise_vis)
           local real = data:getBatch()
           disp.image(fake1, {win=opt.display_id, title=opt.name})
           disp.image(fake2, {win=opt.display_id * 3, title=opt.name})
-          disp.image(real,  {win=opt.display_id*9 , title=opt.name})
+          disp.image(real, {win=opt.display_id * 9, title=opt.name})
       end
 
       -- logging
@@ -344,14 +293,14 @@ for epoch = 1, opt.niter do
                  errG and errG or -1, errD and errD or -1))
       end
    end
-   paths.mkdir('checkpoints_message')
-   --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
-   --parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_message/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
-   torch.save('checkpoints_message/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
-   --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
+   paths.mkdir('conceding-main-checkpoints')
+   parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
+   parametersG, gradParametersG = nil, nil
+   torch.save('conceding-main-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState() } )
+   torch.save('conceding-main-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
+   parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()
-   --parametersG, gradParametersG = model_utils.combine_all_parameters(G)
+   parametersG, gradParametersG = model_utils.combine_all_parameters(G)
    print(('End of epoch %d / %d \t Time Taken: %.3f'):format(
             epoch, opt.niter, epoch_tm:time().real))
 end

@@ -229,10 +229,10 @@ noise_vis1 = noise1:clone()
 noise_vis2 = noise2:clone()
 if opt.noise == 'uniform' then
     noise_vis1:uniform(-1, 1)
-    noise_vis2:uniform(0,1)
+    noise_vis2:uniform(-1,1)
 elseif opt.noise == 'normal' then
     noise_vis1:normal(0, 1)
-    noise_vis2:normal(-1,1)
+    noise_vis2:normal(0,1)
 end
 
 ------- Forward Through the netI once initially as base case ----
@@ -303,8 +303,8 @@ local fGx = function(x)
    input:copy(fake) ]]--
    -- assuming all the required outputs have been precomputed in fDx
    label:fill(real_label) -- fake labels are real for generator cost
-   zero_batch:fill(1)
-   local diff_G1_G2= D_G1_out-D_G2_out
+   --zero_batch:fill(1)
+   local diff_G1_G2= D_G2_out-D_G1_out
    local relu_diff_G1_G2=G.relu:forward(diff_G1_G2) 
    local output = netD.output -- netD:forward(input) was already executed in fDx, so save computation
    local errG2 = criterion:forward(output, label) + compete_criterion:forward(relu_diff_G1_G2,zero_batch)
@@ -315,7 +315,7 @@ local fGx = function(x)
 
    local df_input2= G.netG2:backward(torch.cat(noise2,message_G1,2),df_dg)
 
-   local diff_G2_G1= D_G2_out-D_G1_out
+   local diff_G2_G1= D_G1_out-D_G2_out
    local relu_diff_G2_G1=G.relu:forward(diff_G2_G1)
    local output = netD:forward(G.netG1.output)
    local errG1 = criterion:forward(output,label) + compete_criterion:forward(relu_diff_G2_G1,zero_batch)
