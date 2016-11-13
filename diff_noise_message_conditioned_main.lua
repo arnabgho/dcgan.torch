@@ -359,14 +359,16 @@ for epoch = 1, opt.niter do
       -- display
       counter = counter + 1
       if counter % 10 == 0 and opt.display then
-          local fake1 = G.netG1:forward(torch.cat(noise_vis1,message_G2,2))
-          local fake2 = G.netG2:forward(torch.cat(noise_vis2,message_G1,2))
+          local fake1 = G.netG1:forward(torch.cat(noise_vis1,message_G2,2)):clone()
+          local fake2 = G.netG2:forward(torch.cat(noise_vis2,message_G1,2)):clone()
           local real = data:getBatch()
-          m_noise1=message_G2     --zero()         -- :normal(0,eps)
-          m_noise2=message_G1     --zero()               -- :normal(0,eps)      
-	  local mess_vis1 = G.netG1:forward( torch.cat(m_noise1,message_G2,2))
-          local mess_vis2 = G.netG2:forward( torch.cat(m_noise2,message_G1,2))
-	  disp.image(fake1, {win=opt.display_id, title=opt.name})
+          m_noise1:zero()
+          m_noise2:zero()
+	  local mess_vis1 = G.netG1:forward( torch.cat(m_noise1,message_G2,2)):clone()
+	  local mess_vis2 = G.netG2:forward( torch.cat(m_noise2,message_G1,2)):clone()
+          print("diff1: "..(torch.sum(fake1-mess_vis1)))
+          print("diff2: "..(torch.sum(fake2-mess_vis2)))
+          disp.image(fake1, {win=opt.display_id, title=opt.name})
           disp.image(fake2, {win=opt.display_id +1, title=opt.name})
           disp.image(real,  {win=opt.display_id +2, title=opt.name})
           disp.image(mess_vis1,  {win=opt.display_id +3, title=opt.name.."_vis_message"})
@@ -386,7 +388,7 @@ for epoch = 1, opt.niter do
    paths.mkdir('checkpoints_diff_noise_message_conditioned')
    --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    --parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_diff_noise_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
+   torch.save('checkpoints_diff_noise_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G,message_G1=message_G1,message_G2=message_G2 } )
    torch.save('checkpoints_diff_noise_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
    --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()

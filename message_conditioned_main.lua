@@ -376,7 +376,7 @@ for epoch = 1, opt.niter do
    paths.mkdir('checkpoints_message_conditioned')
    --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    --parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
+   torch.save('checkpoints_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G,message_G1=message_G1,message_G2=message_G2} )
    torch.save('checkpoints_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
    --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()

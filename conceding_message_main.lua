@@ -345,11 +345,11 @@ for epoch = 1, opt.niter do
       -- display
       counter = counter + 1
       if counter % 10 == 0 and opt.display then
-          local fake1 = G.netG1:forward(torch.cat(noise,message_G2,2))
-          local fake2 = G.netG2:forward(torch.cat(noise,message_G1,2))
+          local fake1 = G.netG1:forward(torch.cat(noise,message_G2,2)):clone()
+          local fake2 = G.netG2:forward(torch.cat(noise,message_G1,2)):clone()
           local real = data:getBatch()
-          local m_vis1 = G.netG1:forward( torch.cat(m_noise,message_G2,2))
-          local m_vis2 = G.netG2:forward( torch.cat(m_noise,message_G1,2))
+          local m_vis1 = G.netG1:forward( torch.cat(m_noise,message_G2,2)):clone()
+          local m_vis2 = G.netG2:forward( torch.cat(m_noise,message_G1,2)):clone()
           disp.image(fake1, {win=opt.display_id, title=opt.name})
           disp.image(fake2, {win=opt.display_id + 1, title=opt.name})
           disp.image(real,  {win=opt.display_id+2 , title=opt.name})
@@ -370,7 +370,7 @@ for epoch = 1, opt.niter do
    paths.mkdir('checkpoints_conceding_message')
    --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    --parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_conceding_message/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
+   torch.save('checkpoints_conceding_message/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G,message_G1=message_G1,message_G2=message_G2} )
    torch.save('checkpoints_conceding_message/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
    --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()

@@ -296,7 +296,7 @@ for epoch = 1, opt.niter do
    paths.mkdir('conceding-main-checkpoints')
    parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    parametersG, gradParametersG = nil, nil
-   torch.save('conceding-main-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1:clearState(),G.netG2:clearState() } )
+   torch.save('conceding-main-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G} )
    torch.save('conceding-main-checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD:clearState())
    parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()

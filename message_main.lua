@@ -187,8 +187,7 @@ local prev_fake2 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
-   input = input:cuda();  noise = noise:cuda();  label = label:cuda() ; message_G1=message_G1:cuda() ; message_G2 = message_G2:cuda()
-
+   input = input:cuda();  noise = noise:cuda();  label = label:cuda() ; message_G1= message_G1:cuda() ; message_G2 = message_G2:cuda() ; prev_fake1=prev_fake1:cuda() ; prev_fake2=prev_fake2:cuda()
 --   if pcall(require, 'cudnn') then
 --      require 'cudnn'
 --      cudnn.benchmark = true
@@ -347,7 +346,7 @@ for epoch = 1, opt.niter do
    paths.mkdir('checkpoints_message')
    --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    --parametersG, gradParametersG = nil, nil
-   torch.save('checkpoints_message/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G.netG1,G.netG2,G.netI } )
+   torch.save('checkpoints_message/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G,message_G1=message_G1,message_G2=message_G2} )
    torch.save('checkpoints_message/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
    --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
    --parametersG, gradParametersG = netG:getParameters()
