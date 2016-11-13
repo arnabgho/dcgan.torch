@@ -10,6 +10,7 @@ opt = {
     batchSize = 64,        -- number of samples to produce
     noisetype = 'normal',  -- type of noise distribution (uniform / normal).
     net = '',              -- path to the generator network
+    netD = '',             -- path to the discriminator network
     imsize = 1,            -- used to produce larger images. 1 = 64px. 2 = 80px, 3 = 96px, ...
     noisemode = 'random',  -- random / line / linefull1d / linefull
     name = 'generation1',  -- name of the file saved
@@ -25,36 +26,69 @@ if opt.display == 0 then opt.display = false end
 
 assert(net ~= '', 'provide a generator model')
 
-jsons={
-'bald.json',
-'brown.json',
-'black.json',
-'blond.json',
-'gray.json'
-}
-G=torch.load(net).G
-for k,v in pairs(jsons) do
-   local file=io.open('celebA/'..k)
-   local file_contents=file:read("*all")
-   local filenames=json.decode(file_contents)
-   file:close()   
-   local data=torch.Tensor(opt.num_tsne,3,64,64)
-   local messages=torch.Tensor(opt.num_tsne,opt.nmsg)
-   local i=1
-   for filename,_ in pairs(filenames) do
-      data[i]=image.load('celebA/img_align_celebA/'..filename)  
-      i=i+1
-      if i>opt.num_tsne then break end
-   end   
+assert(netD ~= '', 'provide a generator model')
+local G=torch.load(net).G
+local D=torch.load(netD)
 
-   local num_batches=opt.num_tsne/opt.batchSize
- 
-   for j=0,num_batches-1 do
-      messages[{{j*opt.batchSize+1,j*opt.batchSize+opt.batchSize}}]=G.net_I:forward(data[{{j*opt.batchSize+1,j*opt.batchSize+opt.batchSize}}]):reshape(opt.batchSize,opt.nmsg)
-   end
-   local messages_tsne = m.embeddin.tsne(messages,{dim=2,perplexity=30})
-   npy4th.savenpy("celebA/"..k..'.npy',messages_tsne)
-end 
+
+local cifar_train=torch.load('cifar/cifar10-train.t7')
+local cifar_test =torch.load('cifar/cifar10-test.t7')
+
+local num_batches_train = cifar_train.data:size(1)/opt.batchSize
+local num_batches_test = cifar_test.data:size(1)/opt.batchSize
+
+local features_train = torch.Tensor(num_batches_train*opt.batchSize, 2*512*4*4)
+local features_test = torch.Tensor(num_batches_train*opt.batchSize, 2*512*4*4)
+
+for i=0,num_batches_train-1 do
+   D:forward( cifar_train.data[{{i*opt.batchSize+1,(i+1)*opt.batchSize }}] )
+   local D_features=D.modules[11].output:reshape(opt.batchSize,512*4*4)
+   G.net_I:forward(   cifar_train.data[{{i*opt.batchSize+1,(i+1)*opt.batchSize }}] )
+   local M_features=G.net_I.modules[11].output:reshape(opt.batchSize,512*4*4)
+   features_train[ {{i*opt.batchSize+1 , (i+1)*opt.batchSize   }}  ]=torch.cat( {D_features , M_features} ,2  )
+end
+
+for i=0,num_batches_test-1 do
+   D:forward( cifar_test.data[{{i*opt.batchSize+1,(i+1)*opt.batchSize }}] )
+   local D_features=D.modules[11].output:reshape(opt.batchSize,512*4*4)
+   G.net_I:forward(   cifar_test.data[{{i*opt.batchSize+1,(i+1)*opt.batchSize }}] )
+   local M_features=G.net_I.modules[11].output:reshape(opt.batchSize,512*4*4)
+   features_test[ {{i*opt.batchSize+1 , (i+1)*opt.batchSize   }}  ]=torch.cat( {D_features , M_features} ,2  )
+end
+
+
+
+npy4th.savenpy( 'repTrain.npy' , features_train  )
+npy4th.savenpy( 'classTrain.npy', cifar_train.label[ {{ 1 , num_batches_train*opt.batchSize  }}  ]
+npy4th.savenpy( 'repTest.npy' , features_test  )
+npy4th.savenpy( 'classTest.npy', cifar_test.label[ {{ 1 , num_batches_test*opt.batchSize  }}  ]
+
+
+
+
+
+--for k,v in pairs(jsons) do
+--   local file=io.open('celebA/'..k)
+--   local file_contents=file:read("*all")
+--   local filenames=json.decode(file_contents)
+--   file:close()   
+--   local data=torch.Tensor(opt.num_tsne,3,64,64)
+--   local messages=torch.Tensor(opt.num_tsne,opt.nmsg)
+--   local i=1
+--   for filename,_ in pairs(filenames) do
+--      data[i]=image.load('celebA/img_align_celebA/'..filename)  
+--      i=i+1
+--      if i>opt.num_tsne then break end
+--   end   
+--
+--   local num_batches=opt.num_tsne/opt.batchSize
+-- 
+--   for j=0,num_batches-1 do
+--      messages[{{j*opt.batchSize+1,j*opt.batchSize+opt.batchSize}}]=G.net_I:forward(data[{{j*opt.batchSize+1,j*opt.batchSize+opt.batchSize}}]):reshape(opt.batchSize,opt.nmsg)
+--   end
+--   local messages_tsne = m.embeddin.tsne(messages,{dim=2,perplexity=30})
+--   npy4th.savenpy("celebA/"..k..'.npy',messages_tsne)
+--end 
 
 
 
