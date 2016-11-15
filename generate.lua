@@ -18,6 +18,13 @@ for k,v in pairs(opt) do opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[
 print(opt)
 if opt.display == 0 then opt.display = false end
 
+if opt.gpu~=0 then 
+	require 'cunn' 
+	if pcall(require,'cudnn') then
+		require 'cudnn'
+	end
+end
+
 assert(net ~= '', 'provide a generator model')
 
 noise = torch.Tensor(opt.batchSize, opt.nz, opt.imsize, opt.imsize)

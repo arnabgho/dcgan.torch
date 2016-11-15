@@ -17,7 +17,7 @@ opt = {
    ntrain = math.huge,     -- #  of examples per epoch. math.huge for full dataset
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
-   gpu = 0,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
+   gpu = 1,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
    name = 'experiment1',
    noise = 'normal',       -- uniform / normal
 }
