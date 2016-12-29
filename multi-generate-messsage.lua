@@ -58,18 +58,19 @@ end
 
 if opt.noisetype == 'uniform' then
     noise1:uniform(-1, 1)
-    noise2:normal(0,1)
+    noise2:uniform(-1,1)
     noiseL = torch.FloatTensor(opt.nz-opt.nmsg):uniform(-1, 1)
     noiseR = torch.FloatTensor(opt.nz-opt.nmsg):normal(0, 1)
 elseif opt.noisetype == 'normal' then
     noise1:normal(0, 1)
-    noise2:uniform(-1,1)
+    noise2:normal(0,1)
     noiseL = torch.FloatTensor(opt.nz-opt.nmsg):normal(0,1)
     noiseR = torch.FloatTensor(opt.nz-opt.nmsg):uniform(-1,1)
 end
 
 local mess_G1=T.message_G1[opt.msg_id]
-local mess_G2=T.message_G2[opt.msg_id]
+local mess_G2=  T.message_G2[opt.msg_id]
+--local mess_G2=  T[1][opt.msg_id]   --T.message_G2[opt.msg_id]
 
 if opt.noisemode == 'line' then
    -- do a linear interpolation in Z space between point A and point B

@@ -4,7 +4,7 @@ npy4th=require 'npy4th'
 json=require 'json'
 local optnet = require 'optnet'
 m=require 'manifold'
-torch.setdefaulttensortype('torch.FloatTensor')
+torch.setdefaulttensortype('torch.DoubleTensor')
 
 opt = {
     batchSize = 64,        -- number of samples to produce
@@ -16,7 +16,7 @@ opt = {
     gpu = 1,               -- gpu mode. 0 = CPU, 1 = GPU
     display = 1,           -- Display image: 0 = false, 1 = true
     nz = 100,
-    num_tsne=1024,         -- Number of tsne files to visualize
+    num_tsne=1000,         -- Number of tsne files to visualize
     nmsg=50,                -- Message Dimension              
 }
 for k,v in pairs(opt) do opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[k] end
@@ -25,6 +25,10 @@ if opt.display == 0 then opt.display = false end
 
 assert(net ~= '', 'provide a generator model')
 
+if opt.gpu~=0 then
+   require 'cunn'
+   --torch.setdefaulttensortype('torch.CudaTensor')
+end
 jsons={
 'bald.json',
 'brown.json',
@@ -32,28 +36,34 @@ jsons={
 'blond.json',
 'gray.json'
 }
-G=torch.load(net).G
+G=torch.load(opt.net).G
 for k,v in pairs(jsons) do
-   local file=io.open('celebA/'..k)
+   local file=io.open('/home1/arnab/dcgan.torch/celebA/'..v)
    local file_contents=file:read("*all")
    local filenames=json.decode(file_contents)
    file:close()   
    local data=torch.Tensor(opt.num_tsne,3,64,64)
    local messages=torch.Tensor(opt.num_tsne,opt.nmsg)
-   local i=1
+   i=1
    for filename,_ in pairs(filenames) do
-      data[i]=image.load('celebA/img_align_celebA/'..filename)  
+      data[i]=image.load('/home1/arnab/dcgan.torch/celebA/img_align_celeba/'..filename)  
       i=i+1
       if i>opt.num_tsne then break end
    end   
 
    local num_batches=opt.num_tsne/opt.batchSize
- 
+   local message_batch 
+   data=data:cuda()
    for j=0,num_batches-1 do
-      messages[{{j*opt.batchSize+1,j*opt.batchSize+opt.batchSize}}]=G.net_I:forward(data[{{j*opt.batchSize+1,j*opt.batchSize+opt.batchSize}}]):reshape(opt.batchSize,opt.nmsg)
+      --messages[{ {j*opt.batchSize+1,j*opt.batchSize+opt.batchSize} ,{}  }]=G.netI:forward(data[{{j*opt.batchSize+1,j*opt.batchSize+opt.batchSize} ,{} , {} , {}   }]):reshape(opt.batchSize,opt.nmsg)
+      message_batch=G.netI:forward(data[{{j*opt.batchSize+1,j*opt.batchSize+opt.batchSize} ,{} , {} , {}   }]):reshape(opt.batchSize,opt.nmsg)
+      messages[{ {j*opt.batchSize+1,j*opt.batchSize+opt.batchSize} ,{}  }]  = message_batch:float()
    end
-   local messages_tsne = m.embeddin.tsne(messages,{dim=2,perplexity=30})
-   npy4th.savenpy("celebA/"..k..'.npy',messages_tsne)
+
+   messages=messages:double()
+   local messages_tsne = m.embedding.tsne(messages,{dim=2,perplexity=30})
+   --local messages_lle = m.embedding.lle(messages,{dim=2,neighbors=5})
+   npy4th.savenpy("celebA/".. v ..'.npy',messages_tsne)
 end 
 
 

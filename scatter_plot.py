@@ -1,17 +1,21 @@
-import matplotlib as plt
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import numpy as np
-
-bald=np.load("celebA/bald.json.npy")
-black=np.load("celebA/black.json.npy")
-brown=np.load("celebA/brown.json.npy")
-blond=np.load("celebA/blond.json.npy")
-gray=np.load("celebA/gray.json.npy")
+import matplotlib.patches as mpatches
+from sklearn.manifold import TSNE
+num_show=200
+bald=np.load("celebA/bald.json.npy")[:num_show,:]
+black=np.load("celebA/black.json.npy")[:num_show,:]
+brown=np.load("celebA/brown.json.npy")[:num_show,:]
+blond=np.load("celebA/blond.json.npy")[:num_show,:]
+gray=np.load("celebA/gray.json.npy")[:num_show,:]
 
 begin=bald.shape[0]
 
 attributes = ['bald','black','brown','blond','gray']
 x=np.concatenate( (bald,black,brown,blond,gray) , axis=0)
-y=np.ones(x.shape[0])
+y=np.ones(x.shape[0]).astype(int)
 
 for i in range(5):
 	y[ i*begin:begin*(i+1) ] =i

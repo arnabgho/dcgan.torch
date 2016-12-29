@@ -27,11 +27,11 @@ if opt.display == 0 then opt.display = false end
 local cifar_train=torch.load('cifar/cifar10-train.t7')
 local cifar_test =torch.load('cifar/cifar10-test.t7')
 
-local num_batches_train = cifar_train.data:size(1)/opt.batchSize
+local num_batches_train =cifar_train.data:size(1)/opt.batchSize
 local num_batches_test = cifar_test.data:size(1)/opt.batchSize
 
 --local features_train = torch.Tensor(num_batches_train*opt.batchSize, 2*512*4*4)
-local features_test = torch.Tensor(num_batches_train*opt.batchSize, 2*512*4*4)
+local features_test = torch.Tensor(num_batches_test*opt.batchSize, 2*512*4*4)
 local image_batch=torch.Tensor(opt.batchSize,3,64,64)
 
 if opt.gpu~=0 then
@@ -82,10 +82,10 @@ end
 --features_train=features_train:float()
 features_test = features_test:float()
 
---local train_file=hdf5.open( "repTrain.h5" ,'w' )
+--local train_file=hdf5.open( "imgnet_repTrain.h5" ,'w' )
 --train_file:write('features',features_train)
 --train_file:write('labels',  cifar_train.label[ {{ 1 , num_batches_train*opt.batchSize  }}  ] )
-local test_file=hdf5.open( "repTest.h5" ,'w' )
+local test_file=hdf5.open( "imgnet_repTest.h5" ,'w' )
 test_file:write('features',features_test)
 test_file:write('labels',  cifar_test.label[ {{ 1 , num_batches_test*opt.batchSize  }}  ] )
 
