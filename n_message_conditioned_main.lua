@@ -168,19 +168,17 @@ optimStateD = {
 }
 ----------------------------------------------------------------------------
 local input = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
-local noise1 = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
-local noise2 = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
 local label = torch.Tensor(opt.batchSize)
 local errD, errG
 local epoch_tm = torch.Timer()
 local tm = torch.Timer()
 local data_tm = torch.Timer()
-local message_G1 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local message_G2 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local prev_fake1 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
-local prev_fake2 = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
-local provisional_message_G1 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local provisional_message_G2 = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
+local message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
+local noise = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
+local noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1)
+local prev_mapped_message_cache = torch.Tensor(opt.batchSize,ngen,nmsg)
+local prev_fake_cache = torch.Tensor(ngen,opt.batchSize, 3, opt.fineSize, opt.fineSize)
+local provisional_message_cache = torch.Tensor(ngen,opt.batchSize,nmsg,1,1):normal(0,1)
 ----------------------------------------------------------------------------
 if opt.gpu > 0 then
    require 'cunn'
@@ -249,6 +247,7 @@ local fDx = function(x)
       elseif opt.noise=='normal' then
           noise:normal(0,1)
       end
+      noise_cache[i]=noise
       local fake=G['netG'..i]:forward( torch.cat( noise,message,2))
       input:copy(fake)
       label:fill(fake_label)
@@ -262,60 +261,40 @@ local fDx = function(x)
 end
 
 -- create closure to evaluate f(X) and df/dX of generator
-local fGx = function(x)
+local fGx = function(x) do
    gradParametersG:zero()
-   --[[ the three lines below were already executed in fDx, so save computation
-   noise:uniform(-1, 1) -- regenerate random noise
-   local fake = netG:forward(noise)
-   input:copy(fake) ]]--
-   -- assuming all the required outputs have been precomputed in fDx
-   label:fill(real_label) -- fake labels are real for generator cost
+   label:fill(real_label)
+   local errG=0
+   local df_message = torch.Tensor( opt.batchSize , nmsg , 1, 1 ):fill(0)
+   for i=1,ngen do
+      local output = netD:forward(G['netG' .. i].output)
+      errG = errG + criterion:forward(output,label)
+      local df_do = criterion:backward(output,label)
 
-   local output = netD.output -- netD:forward(input) was already executed in fDx, so save computation
-   local errG2 = criterion:forward(output, label)
-   local df_do = criterion:backward(output, label)
+      local df_dg = netD:updateGradInput(G['netG' .. i].output,df_do)
 
-   local df_dg = netD:updateGradInput(G.netG2.output, df_do)
+      local df_input=G['netG'..i]:backward(torch.cat(noise_cache[i],message,2),df_dg)
+      df_message=df_message+df_input[{ {} ,{nz-nmsg+1,nz}}]  
+   end
+   df_mapped_messages=reducer:backward( prev_mapped_message_cache, df_message:reshape(opt.batchSize,nmsg))
+   df_mapped_messages=df_mapped_messages:transpose(1,2)
+   for i=1,ngen do
+       local df_dM = G['netM'..i]:backward(torch.cat( { provisional_message_cache[i]:reshape(opt.batchSize,nmsg),noise_cache[i]:reshape(opt.batchSize,nz-nmsg ) , message:reshape(opt.batchSize,nmsg)  },2) , df_mapped_messages[i]:reshape(opt.batchSize,nmsg))
+       local df_dI = df_dM[ { {} , { 1 , nmsg  } }]:reshape(opt.batchSize,nmsg,1,1)
+       G['netI'..i]:backward( prev_fake_cache[i] , df_dI )
+   end
 
-   local df_input2= G.netG2:backward(torch.cat(noise2,message_G1,2),df_dg)
-
-   local output = netD:forward(G.netG1.output)
-   local errG1 = criterion:forward(output,label)
-   local df_do = criterion:backward(output,label)
-
-   local df_dg = netD:updateGradInput(G.netG1.output,df_do)
-
-   local df_input1=G.netG1:backward(torch.cat(noise1,message_G2,2),df_dg)
-
-
-   local df_dG2_m1=df_input2[{ {} ,{nz-nmsg+1,nz}}]
-   local df_dG1_m2=df_input1[{ {} ,{nz-nmsg+1,nz}}]
-
-   local df_dM1 =  G.netM:backward(  torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,2 ) , df_dG2_m1:reshape(opt.batchSize,nmsg))
-
-   local df_dM2 = G.netM_clone:backward( torch.cat({provisional_message_G2:reshape(opt.batchSize,nmsg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,2 ) , df_dG1_m2:reshape(opt.batchSize,nmsg))
-
-   local df_dI1 = df_dM1[ { {} , { 1 , nmsg  } }]:reshape(opt.batchSize,nmsg,1,1)
-   local df_dI2 = df_dM2[ { {} , { 1 , nmsg  } }]:reshape(opt.batchSize,nmsg,1,1)
-
-
-   G.netI:backward( prev_fake1  , df_dI1 )
-   G.netI_clone:backward( prev_fake2 , df_dI2  )
-
-   provisional_message_G1= G.netI:forward(G.netG1.output)
-   provisional_message_G2 = G.netI_clone:forward(G.netG2.output)
-
-   local temp_message_G1 = G.netM:forward( torch.cat({ provisional_message_G1:reshape(opt.batchSize,nmsg), noise1:reshape(opt.batchSize,nz-nmsg ) , message_G2:reshape(opt.batchSize,nmsg)  }  ,2 )  )
-   local temp_message_G2 = G.netM_clone:forward( torch.cat({provisional_message_G2:reshape(opt.batchSize,nmsg),noise2:reshape(opt.batchSize,nz-nmsg ) , message_G1:reshape(opt.batchSize,nmsg)   }  ,2 )  )
-
-   message_G1=temp_message_G1:reshape(opt.batchSize,nmsg,1,1)
-   message_G2=temp_message_G2:reshape(opt.batchSize,nmsg,1,1)
-   prev_fake1 = G.netG1.output
-   prev_fake2 = G.netG2.output
-   errG=errG1+errG2
+   -- Forward Processing of the messages and the reducer and the filling up of the caches need to be updated
+   local temp_prev_mapped_message_cache=torch.Tensor(ngen,opt.batchSize,nmsg)
+   for i=1,ngen do
+       provisional_message_cache[i]=G['netI'..i]:forward(G['netG'..i].output)
+       temp_prev_mapped_message_cache[i]=G['netM'..i]:forward( torch.cat({ provisional_message_cache[i]:reshape(opt.batchSize,nmsg), noise_cache[i]:reshape(opt.batchSize,nz-nmsg ) , message:reshape(opt.batchSize,nmsg)  }  ,2 )  )
+       prev_fake_cache[i]=G['netG'..i].output
+   end
+   prev_mapped_message_cache=temp_prev_mapped_message_cache:transpose(1,2)
+   message=reducer:forward(prev_mapped_message_cache)
    return errG, gradParametersG
 end
-
 
 -- train
 for epoch = 1, opt.niter do
