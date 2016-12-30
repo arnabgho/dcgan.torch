@@ -226,9 +226,11 @@ G.netM_clone:forward( torch.cat({provisional_message_G2:reshape(opt.batchSize,nm
 
 
 -- create closure to evaluate f(X) and df/dX of discriminator
+
 local fDx = function(x)
    gradParametersD:zero()
-
+   -- Currently 1 batch of real data and 1 batch each from the generators
+   -- Might try a version in which n batches of real data along with 1 batch each from the generators
    -- train with real
    data_tm:reset(); data_tm:resume()
    local real = data:getBatch()
@@ -237,41 +239,26 @@ local fDx = function(x)
    label:fill(real_label)
 
    local output = netD:forward(input)
-   local errD_real = criterion:forward(output, label)
+   local errD = criterion:forward(output, label)
    local df_do = criterion:backward(output, label)
    netD:backward(input, df_do)
 
-   -- train with fake
-   if opt.noise == 'uniform' then -- regenerate random noise
-       noise1:uniform(-1, 1)
-       noise2:uniform(-1,1)
-    elseif opt.noise == 'normal' then
-       noise1:normal(0, 1)
-       noise2:normal(0,1)
+   for i=1,ngen do
+      if opt.noise == 'uniform' then 
+          noise:uniform(-1,1)
+      elseif opt.noise=='normal' then
+          noise:normal(0,1)
+      end
+      local fake=G['netG'..i]:forward( torch.cat( noise,message,2))
+      input:copy(fake)
+      label:fill(fake_label)
+
+      local output=netD:forward(input)
+      errD=errD+criterion:forward(output,label)
+      local df_do = criterion:backward(output,label)
+      netD:backward(input,df_do)
    end
-   local fake1 = G.netG1:forward(torch.cat(noise1,message_G2,2))
-   local fake2 = G.netG2:forward(torch.cat(noise2,message_G1,2))
-
-   input:copy(fake1)
-   label:fill(fake_label)
-
-   local output = netD:forward(input)
-   local errD_fake1 = criterion:forward(output, label)
-   local df_do = criterion:backward(output, label)
-   netD:backward(input, df_do)
-
-   input:copy(fake2)
-   label:fill(fake_label)
-
-   local output = netD:forward(input)
-   local errD_fake2 = criterion:forward(output, label)
-   local df_do = criterion:backward(output, label)
-   netD:backward(input, df_do)
-
-
-   errD = errD_real + errD_fake1 + errD_fake2
-
-   return errD, gradParametersD
+   return errD,gradParametersD 
 end
 
 -- create closure to evaluate f(X) and df/dX of generator
