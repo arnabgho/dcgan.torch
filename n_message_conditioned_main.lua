@@ -238,7 +238,7 @@ local fDx = function(x)
     label:fill(real_label)
 
     local output = netD:forward(input)
-    local errD = criterion:forward(output, label)
+    errD = criterion:forward(output, label)
     local df_do = criterion:backward(output, label)
     netD:backward(input, df_do)
 
@@ -265,7 +265,7 @@ end
 local fGx = function(x)
     gradParametersG:zero()
     label:fill(real_label)
-    local errG=0
+    errG=0
     local df_message = torch.Tensor( opt.batchSize , nmsg , 1, 1 ):fill(0)
     df_message=df_message:cuda()
     for i=1,ngen do
