@@ -88,7 +88,7 @@ G.netG1:add(nn.Tanh())
 G.netG1:apply(weights_init)
 
 gen_params= G.netG1:getParameters():size(1)
-
+print("Number of parameters of the generator " .. gen_params) 
 --G.netI1 = nn.Sequential()
 --
 ---- input is (nc) x 64 x 64
@@ -177,16 +177,16 @@ local message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
 local noise = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
 local noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1)
 local prev_message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local prev_noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1)
+--local prev_noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1)
 local prev_mapped_message_cache = torch.Tensor(opt.batchSize,ngen,nmsg)
-local prev_fake_cache = torch.Tensor(ngen,opt.batchSize, 3, opt.fineSize, opt.fineSize)
-local provisional_message_cache = torch.Tensor(ngen,opt.batchSize,nmsg,1,1):normal(0,1)
+--local prev_fake_cache = torch.Tensor(ngen,opt.batchSize, 3, opt.fineSize, opt.fineSize)
+--local provisional_message_cache = torch.Tensor(ngen,opt.batchSize,nmsg,1,1):normal(0,1)
 local parameter_cache = torch.Tensor(ngen,opt.batchSize,gen_params)
 ----------------------------------------------------------------------------
 if opt.gpu > 0 then
     require 'cunn'
     cutorch.setDevice(opt.gpu)
-    input = input:cuda();  noise = noise:cuda();  noise_cache= noise_cache:cuda(); label = label:cuda() ; message=message:cuda() ; prev_message = prev_message:cuda() ; prev_fake_cache = prev_fake_cache:cuda() ; provisional_message_cache=provisional_message_cache:cuda();prev_noise_cache=prev_noise_cache:cuda();prev_mapped_message_cache=prev_mapped_message_cache:cuda() ; parameter_cache=parameter_cache:cuda()
+    input = input:cuda();  noise = noise:cuda();  noise_cache= noise_cache:cuda(); label = label:cuda() ; message=message:cuda() ; prev_message = prev_message:cuda() ;prev_mapped_message_cache=prev_mapped_message_cache:cuda() ; parameter_cache=parameter_cache:cuda()
 
     --   if pcall(require, 'cudnn') then
     --      require 'cudnn'
@@ -218,7 +218,7 @@ end
 
 for i=1,ngen do
     --G['netI'..i]:forward(prev_fake_cache[i])
-    G['netM'..i]:forward( torch.cat({ provisional_message_cache[i]:reshape(opt.batchSize,nmsg), noise_cache[i]:reshape(opt.batchSize,nz-nmsg ) , message:reshape(opt.batchSize,nmsg)  }  ,2 )  )
+    G['netM'..i]:forward(parameter_cache[i] )
 end
 G.reducer:forward(prev_mapped_message_cache)
 
@@ -291,13 +291,14 @@ local fGx = function(x)
     local temp_prev_mapped_message_cache=torch.Tensor(ngen,opt.batchSize,nmsg):cuda()
     for i=1,ngen do
         --provisional_message_cache[i]=G['netI'..i]:forward(G['netG'..i].output)
-        temp_prev_mapped_message_cache[i]=G['netM'..i]:forward(G['netG'..i]:parameters() )
+        parameter_cache[i]=torch.repeatTensor(G['netG'..i]:getParameters(),opt.batchSize,1)
+        temp_prev_mapped_message_cache[i]=G['netM'..i]:forward(parameter_cache[i] )
         --prev_fake_cache[i]=G['netG'..i].output
     end
     prev_mapped_message_cache=temp_prev_mapped_message_cache:transpose(1,2)
     prev_message=message
     message=G.reducer:forward(prev_mapped_message_cache)
-    prev_noise_cache=noise_cache
+--    prev_noise_cache=noise_cache
     return errG, gradParametersG
 end
 
