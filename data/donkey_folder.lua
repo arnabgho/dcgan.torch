@@ -64,7 +64,8 @@ local trainHook = function(self, path)
    assert(out:size(2) == oW)
    assert(out:size(3) == oH)
    -- do hflip with probability 0.5
-   if torch.uniform() > 0.5 then out = image.hflip(out); end
+   --mirror removed for digits
+   --if torch.uniform() > 0.5 then out = image.hflip(out); end
    out:mul(2):add(-1) -- make it [0, 1] -> [-1, 1]
    return out
 end
