@@ -23,6 +23,8 @@ opt = {
     name = 'experiment-n_message_conditioned1',
     noise = 'normal',       -- uniform / normal
     ngen = 2,               -- the number of generators generating images                
+    ip='172.27.21.146',     -- the ip for display
+    port=8000,		    -- the port for display
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -204,7 +206,10 @@ end
 local parametersD, gradParametersD = netD:getParameters()
 local parametersG, gradParametersG = model_utils.combine_all_parameters(G)
 
-if opt.display then disp = require 'display' end
+if opt.display then 
+   disp = require 'display' 
+   disp.configure({hostname=opt.ip,port=opt.port})
+end
 
 local noise_vis = noise:clone()
 if opt.noise == 'uniform' then
