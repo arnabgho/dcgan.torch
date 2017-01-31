@@ -1,5 +1,5 @@
 require 'torch'
-require 'nn'
+require 'cunn'
 require 'optim'
 require 'rnn'
 local model_utils = require 'util.model_utils'
@@ -26,6 +26,11 @@ opt = {
     ip='172.27.21.146',     -- the ip for display
     port=8000,		    -- the port for display
 }
+if opt.gpu~=0 then
+   require 'cunn'
+else
+   require 'nn'
+end
 
 -- one-line argument parser. parses enviroment variables to override the defaults
 for k,v in pairs(opt) do opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[k] end

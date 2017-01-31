@@ -61,8 +61,8 @@ for i=0,math.floor(num_batches_train)-1 do
    end 
    D:forward( image_batch )
    local D_features=D.modules[11].output:reshape(opt.batchSize,512*4*4):float()
-   G.netI:forward( image_batch )
-   local M_features=G.netI.modules[11].output:reshape(opt.batchSize,512*4*4):float()
+   G.netI1:forward( image_batch )
+   local M_features=G.netI1.modules[11].output:reshape(opt.batchSize,512*4*4):float()
    features_train[ {{i*opt.batchSize+1 , (i+1)*opt.batchSize   }}  ]=torch.cat( {D_features , M_features} ,2  )
 end
 
@@ -78,8 +78,8 @@ for i=0,num_batches_test-1 do
    end 
    D:forward( image_batch )
    local D_features=D.modules[11].output:reshape(opt.batchSize,512*4*4):float()
-   G.netI:forward( image_batch )
-   local M_features=G.netI.modules[11].output:reshape(opt.batchSize,512*4*4):float()
+   G.netI1:forward( image_batch )
+   local M_features=G.netI1.modules[11].output:reshape(opt.batchSize,512*4*4):float()
    features_test[ {{i*opt.batchSize+1 , (i+1)*opt.batchSize   }}  ]=torch.cat( {D_features , M_features} ,2  )
 end
 
