@@ -20,7 +20,7 @@ opt = {
     display = 1,            -- display samples while training. 0 = false
     display_id = 20,        -- display window id.
     gpu = 1,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-    name = 'experiment-classify_gen_n_alter_CMP',
+    name = 'experiment-classify_gen_n_alter',
     noise = 'normal',       -- uniform / normal
     ngen = 2,               -- the number of generators generating images                
     ip='172.27.21.146',     -- the ip for display
@@ -92,49 +92,49 @@ G.netG1:apply(weights_init)
 
 
 
-G.netI1 = nn.Sequential()
-
--- input is (nc) x 64 x 64
-G.netI1:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
-G.netI1:add(nn.LeakyReLU(0.2, true))
--- state size: (ndf) x 32 x 32
-G.netI1:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
-G.netI1:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*2) x 16 x 16
-G.netI1:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
-G.netI1:add(SpatialBatchNormalization(ndf * 4)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*4) x 8 x 8
-G.netI1:add(SpatialConvolution(ndf * 4, ndf * 8, 4, 4, 2, 2, 1, 1))
-G.netI1:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
--- state size: (ndf*8) x 4 x 4
-G.netI1:add(SpatialConvolution(ndf * 8, nmsg, 4, 4))
-G.netI1:add(SpatialBatchNormalization(nmsg))
---G.netI:add(nn.Sigmoid())
--- state size: nmsg x 1 x 1
---G.netI:add(nn.View(nmsg):setNumInputDims(3))
--- state size: 1
-
-G.netI1:apply(weights_init)
-
-G.netM1 = nn.Sequential()
-G.netM1:add(nn.Linear((nz-nmsg)+nmsg+nmsg,nmsg))
-G.netM1:add(nn.BatchNormalization(nmsg))
-
-G.netM1:apply(weights_init)
+--G.netI1 = nn.Sequential()
+--
+---- input is (nc) x 64 x 64
+--G.netI1:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
+--G.netI1:add(nn.LeakyReLU(0.2, true))
+---- state size: (ndf) x 32 x 32
+--G.netI1:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
+--G.netI1:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
+---- state size: (ndf*2) x 16 x 16
+--G.netI1:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
+--G.netI1:add(SpatialBatchNormalization(ndf * 4)):add(nn.LeakyReLU(0.2, true))
+---- state size: (ndf*4) x 8 x 8
+--G.netI1:add(SpatialConvolution(ndf * 4, ndf * 8, 4, 4, 2, 2, 1, 1))
+--G.netI1:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
+---- state size: (ndf*8) x 4 x 4
+--G.netI1:add(SpatialConvolution(ndf * 8, nmsg, 4, 4))
+--G.netI1:add(SpatialBatchNormalization(nmsg))
+----G.netI:add(nn.Sigmoid())
+---- state size: nmsg x 1 x 1
+----G.netI:add(nn.View(nmsg):setNumInputDims(3))
+---- state size: 1
+--
+--G.netI1:apply(weights_init)
+--
+--G.netM1 = nn.Sequential()
+--G.netM1:add(nn.Linear((nz-nmsg)+nmsg+nmsg,nmsg))
+--G.netM1:add(nn.BatchNormalization(nmsg))
+--
+--G.netM1:apply(weights_init)
 
 for i=2,ngen do
     G['netG' .. i]=G.netG1:clone()
-    G['netI' .. i]=G.netI1:clone('weight','bias','gradWeight','gradBias')
-    G['netM' .. i]=G.netM1:clone('weight','bias','gradWeight','gradBias')
+--    G['netI' .. i]=G.netI1:clone('weight','bias','gradWeight','gradBias')
+--    G['netM' .. i]=G.netM1:clone('weight','bias','gradWeight','gradBias')
     G['netG' .. i]:apply(weights_init)
-    G['netI' .. i]:apply(weights_init)
-    G['netM' .. i]:apply(weights_init)
+--    G['netI' .. i]:apply(weights_init)
+--    G['netM' .. i]:apply(weights_init)
 end
 
-G.reducer=nn.Sequential()
-G.reducer:add(nn.SplitTable(1,2))
-G.reducer:add(nn.Sequencer(nn.LSTM( nmsg , nmsg )  ))
-G.reducer:add(nn.SelectTable(-1))
+--G.reducer=nn.Sequential()
+--G.reducer:add(nn.SplitTable(1,2))
+--G.reducer:add(nn.Sequencer(nn.LSTM( nmsg , nmsg )  ))
+--G.reducer:add(nn.SelectTable(-1))
 
 local netD = nn.Sequential()
 
@@ -177,21 +177,18 @@ local errD, errG
 local epoch_tm = torch.Timer()
 local tm = torch.Timer()
 local data_tm = torch.Timer()
-local message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local noise = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
-local noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1)
-local prev_message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local prev_noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1)
-local prev_mapped_message_cache = torch.Tensor(opt.batchSize,ngen,nmsg)
-local prev_fake_cache = torch.Tensor(ngen,opt.batchSize, 3, opt.fineSize, opt.fineSize)
-local provisional_message_cache = torch.Tensor(ngen,opt.batchSize,nmsg,1,1):normal(0,1)
+local noise = torch.Tensor(opt.batchSize, nz , 1, 1)
+local noise_cache = torch.Tensor(ngen,opt.batchSize , nz ,1 , 1)
+--local prev_message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
+--local prev_noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1)
+--local prev_mapped_message_cache = torch.Tensor(opt.batchSize,ngen,nmsg)
+--local prev_fake_cache = torch.Tensor(ngen,opt.batchSize, 3, opt.fineSize, opt.fineSize)
+--local provisional_message_cache = torch.Tensor(ngen,opt.batchSize,nmsg,1,1):normal(0,1)
 ----------------------------------------------------------------------------
 if opt.gpu > 0 then
     require 'cunn'
     cutorch.setDevice(opt.gpu)
-    input = input:cuda();  noise = noise:cuda();  noise_cache= noise_cache:cuda(); label = label:cuda() ; message=message:cuda() ; prev_message = prev_message:cuda() ; prev_fake_cache = prev_fake_cache:cuda() ; provisional_message_cache=provisional_message_cache:cuda();prev_noise_cache=prev_noise_cache:cuda();prev_mapped_message_cache=prev_mapped_message_cache:cuda()
-
-    --   if pcall(require, 'cudnn') then
+    input = input:cuda();  noise = noise:cuda();noise_cache=noise_cache:cuda();  label = label:cuda() ;     --   if pcall(require, 'cudnn') then
     --      require 'cudnn'
     --      cudnn.benchmark = true
     --      --cudnn.convert(netG, cudnn)
@@ -222,11 +219,11 @@ end
 
 ------- Forward Through the netI once initially as base case ----
 
-for i=1,ngen do
-    G['netI'..i]:forward(prev_fake_cache[i])
-    G['netM'..i]:forward( torch.cat({ provisional_message_cache[i]:reshape(opt.batchSize,nmsg), noise_cache[i]:reshape(opt.batchSize,nz-nmsg ) , message:reshape(opt.batchSize,nmsg)  }  ,2 )  )
-end
-G.reducer:forward(prev_mapped_message_cache)
+--for i=1,ngen do
+--    G['netI'..i]:forward(prev_fake_cache[i])
+--    G['netM'..i]:forward( torch.cat({ provisional_message_cache[i]:reshape(opt.batchSize,nmsg), noise_cache[i]:reshape(opt.batchSize,nz-nmsg ) , message:reshape(opt.batchSize,nmsg)  }  ,2 )  )
+--end
+--G.reducer:forward(prev_mapped_message_cache)
 
 ----------------------------------------------------------------
 
@@ -258,7 +255,7 @@ local fDx = function(x)
             noise:normal(0,1)
         end
         noise_cache[i]=noise
-        local fake=G['netG'..i]:forward( torch.cat( noise,message,2))
+        local fake=G['netG'..i]:forward( noise)
         input:copy(fake)
         label:fill(fake_labels[i])
 
@@ -275,37 +272,14 @@ local fGx = function(x)
     gradParametersG:zero()
     label:fill(real_label)
     errG=0
-    local df_message = torch.Tensor( opt.batchSize , nmsg , 1, 1 ):fill(0)
-    df_message=df_message:cuda()
     for i=1,ngen do
         local output = netD:forward(G['netG' .. i].output)
         errG = errG + criterion:forward(output,label)
         local df_do = criterion:backward(output,label)
 
-        local df_dg = netD:updateGradInput(G['netG' .. i].output,df_do)
-
-        local df_input=G['netG'..i]:backward(torch.cat(noise_cache[i],message,2),df_dg)
-        df_message=df_message+df_input[{ {} ,{nz-nmsg+1,nz}}]  
+        local df_dg = netD:updateGradInput(G['netG'..i].output,df_do)
+        G['netG'..i]:backward(noise,df_dg)
     end
-    df_mapped_messages=G.reducer:backward( prev_mapped_message_cache, df_message:reshape(opt.batchSize,nmsg))
-    df_mapped_messages=df_mapped_messages:transpose(1,2)
-    for i=1,ngen do
-        local df_dM = G['netM'..i]:backward(torch.cat( { provisional_message_cache[i]:reshape(opt.batchSize,nmsg),prev_noise_cache[i]:reshape(opt.batchSize,nz-nmsg ) , prev_message:reshape(opt.batchSize,nmsg)  },2) , df_mapped_messages[i]:reshape(opt.batchSize,nmsg))
-        local df_dI = df_dM[ { {} , { 1 , nmsg  } }]:reshape(opt.batchSize,nmsg,1,1)
-        G['netI'..i]:backward( prev_fake_cache[i] , df_dI )
-    end
-
-    -- Forward Processing of the messages and the reducer and the filling up of the caches need to be updated
-    local temp_prev_mapped_message_cache=torch.Tensor(ngen,opt.batchSize,nmsg):cuda()
-    for i=1,ngen do
-        provisional_message_cache[i]=G['netI'..i]:forward(G['netG'..i].output)
-        temp_prev_mapped_message_cache[i]=G['netM'..i]:forward( torch.cat({ provisional_message_cache[i]:reshape(opt.batchSize,nmsg), noise_cache[i]:reshape(opt.batchSize,nz-nmsg ) , message:reshape(opt.batchSize,nmsg)  }  ,2 )  )
-        prev_fake_cache[i]=G['netG'..i].output
-    end
-    prev_mapped_message_cache=temp_prev_mapped_message_cache:transpose(1,2)
-    prev_message=message
-    message=G.reducer:forward(prev_mapped_message_cache)
-    prev_noise_cache=noise_cache
     return errG, gradParametersG
 end
 
@@ -327,7 +301,7 @@ for epoch = 1, opt.niter do
             local real = data:getBatch()
             disp.image(real,  {win=opt.display_id , title=opt.name})
             for i=1,ngen do
-                local fake=G['netG'..i]:forward(torch.cat(noise_vis,message,2))
+                local fake=G['netG'..i]:forward(noise_vis)
                 disp.image(fake, {win=opt.display_id+i,title=opt.name })
             end
         end
@@ -343,11 +317,11 @@ for epoch = 1, opt.niter do
         end
     end
     if epoch % opt.save_freq==0 then	
-       paths.mkdir('checkpoints_classify_gen_n_alter_CMP')
+       paths.mkdir('checkpoints_classify_gen_n_alter')
        --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
        --parametersG, gradParametersG = nil, nil
-       torch.save('checkpoints_classify_gen_n_alter_CMP/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G,message=message} )
-       torch.save('checkpoints_classify_gen_n_alter_CMP/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+       torch.save('checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G} )
+       torch.save('checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
     end	
     --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
     --parametersG, gradParametersG = netG:getParameters()
