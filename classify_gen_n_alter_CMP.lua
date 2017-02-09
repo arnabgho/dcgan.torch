@@ -1,5 +1,5 @@
 require 'torch'
-require 'cunn'
+require 'nn'
 require 'optim'
 require 'rnn'
 local model_utils = require 'util.model_utils'
@@ -20,17 +20,13 @@ opt = {
     display = 1,            -- display samples while training. 0 = false
     display_id = 20,        -- display window id.
     gpu = 1,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-    name = 'experiment-n_message_conditioned1',
+    name = 'experiment-classify_gen_n_alter_CMP',
     noise = 'normal',       -- uniform / normal
     ngen = 2,               -- the number of generators generating images                
     ip='172.27.21.146',     -- the ip for display
     port=8000,		    -- the port for display
+    save_freq=5, 	    -- the frequency with which the parameters are saved
 }
-if opt.gpu~=0 then
-   require 'cunn'
-else
-   require 'nn'
-end
 
 -- one-line argument parser. parses enviroment variables to override the defaults
 for k,v in pairs(opt) do opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[k] end
@@ -63,10 +59,10 @@ local nc = 3
 local nz = opt.nz
 local ndf = opt.ndf
 local ngf = opt.ngf
-local real_label = 1
-local fake_label = 0
 local nmsg = opt.nmsg
 local ngen = opt.ngen
+local real_label =ngen+ 1
+local fake_labels = torch.linspace(1,ngen,ngen)
 
 local SpatialBatchNormalization = nn.SpatialBatchNormalization
 local SpatialConvolution = nn.SpatialConvolution
@@ -155,15 +151,16 @@ netD:add(SpatialBatchNormalization(ndf * 4)):add(nn.LeakyReLU(0.2, true))
 netD:add(SpatialConvolution(ndf * 4, ndf * 8, 4, 4, 2, 2, 1, 1))
 netD:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf*8) x 4 x 4
-netD:add(SpatialConvolution(ndf * 8, 1, 4, 4))
-netD:add(nn.Sigmoid())
+netD:add(SpatialConvolution(ndf * 8, ngen+1, 4, 4))
+--netD:add(nn.Sigmoid())
 -- state size: 1 x 1 x 1
-netD:add(nn.View(1):setNumInputDims(3))
+--netD:add(nn.View(1):setNumInputDims(3))
 -- state size: 1
 
 netD:apply(weights_init)
 
-local criterion = nn.BCECriterion()
+--local criterion = nn.BCECriterion()
+local criterion = nn.CrossEntropyCriterion()
 ---------------------------------------------------------------------------
 optimStateG = {
     learningRate = opt.lr,
@@ -242,17 +239,19 @@ local fDx = function(x)
     -- Might try a version in which n batches of real data along with 1 batch each from the generators
     -- train with real
     data_tm:reset(); data_tm:resume()
-    local real = data:getBatch()
-    data_tm:stop()
-    input:copy(real)
-    label:fill(real_label)
-
-    local output = netD:forward(input)
-    errD = criterion:forward(output, label)
-    local df_do = criterion:backward(output, label)
-    netD:backward(input, df_do)
 
     for i=1,ngen do
+        local real = data:getBatch()
+        data_tm:stop()
+        input:copy(real)
+        label:fill(real_label)
+    
+        local output = netD:forward(input)
+        errD = criterion:forward(output, label)
+        local df_do = criterion:backward(output, label)
+        netD:backward(input, df_do)
+
+
         if opt.noise == 'uniform' then 
             noise:uniform(-1,1)
         elseif opt.noise=='normal' then
@@ -261,7 +260,7 @@ local fDx = function(x)
         noise_cache[i]=noise
         local fake=G['netG'..i]:forward( torch.cat( noise,message,2))
         input:copy(fake)
-        label:fill(fake_label)
+        label:fill(fake_labels[i])
 
         local output=netD:forward(input)
         errD=errD+criterion:forward(output,label)
@@ -343,11 +342,13 @@ for epoch = 1, opt.niter do
             errG and errG or -1, errD and errD or -1))
         end
     end
-    paths.mkdir('checkpoints_n_message_conditioned')
-    --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
-    --parametersG, gradParametersG = nil, nil
-    torch.save('checkpoints_n_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G,message=message} )
-    torch.save('checkpoints_n_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+    if epoch % opt.save_freq==0 then	
+       paths.mkdir('checkpoints_classify_gen_n_alter_CMP')
+       --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
+       --parametersG, gradParametersG = nil, nil
+       torch.save('checkpoints_classify_gen_n_alter_CMP/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G,message=message} )
+       torch.save('checkpoints_classify_gen_n_alter_CMP/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+    end	
     --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
     --parametersG, gradParametersG = netG:getParameters()
     --parametersG, gradParametersG = model_utils.combine_all_parameters(G)

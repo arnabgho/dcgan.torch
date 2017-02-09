@@ -1,5 +1,5 @@
 require 'torch'
-require 'cunn'
+require 'nn'
 require 'optim'
 require 'rnn'
 local model_utils = require 'util.model_utils'
@@ -20,17 +20,13 @@ opt = {
     display = 1,            -- display samples while training. 0 = false
     display_id = 20,        -- display window id.
     gpu = 1,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-    name = 'experiment-n_message_conditioned1',
+    name = 'experiment-n_alter_message_conditioned1',
     noise = 'normal',       -- uniform / normal
     ngen = 2,               -- the number of generators generating images                
     ip='172.27.21.146',     -- the ip for display
     port=8000,		    -- the port for display
+    save_freq=5, 	    -- the frequency with which the parameters are saved
 }
-if opt.gpu~=0 then
-   require 'cunn'
-else
-   require 'nn'
-end
 
 -- one-line argument parser. parses enviroment variables to override the defaults
 for k,v in pairs(opt) do opt[k] = tonumber(os.getenv(k)) or os.getenv(k) or opt[k] end
@@ -242,17 +238,19 @@ local fDx = function(x)
     -- Might try a version in which n batches of real data along with 1 batch each from the generators
     -- train with real
     data_tm:reset(); data_tm:resume()
-    local real = data:getBatch()
-    data_tm:stop()
-    input:copy(real)
-    label:fill(real_label)
-
-    local output = netD:forward(input)
-    errD = criterion:forward(output, label)
-    local df_do = criterion:backward(output, label)
-    netD:backward(input, df_do)
 
     for i=1,ngen do
+        local real = data:getBatch()
+        data_tm:stop()
+        input:copy(real)
+        label:fill(real_label)
+    
+        local output = netD:forward(input)
+        errD = criterion:forward(output, label)
+        local df_do = criterion:backward(output, label)
+        netD:backward(input, df_do)
+
+
         if opt.noise == 'uniform' then 
             noise:uniform(-1,1)
         elseif opt.noise=='normal' then
@@ -343,11 +341,13 @@ for epoch = 1, opt.niter do
             errG and errG or -1, errD and errD or -1))
         end
     end
-    paths.mkdir('checkpoints_n_message_conditioned')
-    --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
-    --parametersG, gradParametersG = nil, nil
-    torch.save('checkpoints_n_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G,message=message} )
-    torch.save('checkpoints_n_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+    if epoch % opt.save_freq==0 then	
+       paths.mkdir('checkpoints_n_alter_message_conditioned')
+       --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
+       --parametersG, gradParametersG = nil, nil
+       torch.save('checkpoints_n_alter_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G,message=message} )
+       torch.save('checkpoints_n_alter_message_conditioned/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+    end	
     --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
     --parametersG, gradParametersG = netG:getParameters()
     --parametersG, gradParametersG = model_utils.combine_all_parameters(G)
