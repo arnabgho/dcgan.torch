@@ -276,7 +276,7 @@ local fDx = function(x)
 end
 
 local cosine_distance=function(feature_cache,k)
-    local result=torch.Tensor(sum_score_D:size()):fill(0)
+    local result=torch.Tensor(sum_score_D:size()):fill(0):cuda()
     for i=1,ngen do
         if i==k then
             goto continue
@@ -295,7 +295,7 @@ local fGx = function(x)
     errG=0
     for i=1,ngen do
         local output = netD:forward(G['netG' .. i].output)
-        local zero_batch=torch.Tensor(output:size()):zero()
+        local zero_batch=torch.Tensor(output:size()):zero():cuda()
         local diff=ngen*output-sum_score_D-cosine_distance(feature_cache,i)
         diff=-diff/(ngen-1)  -- to enable max(0,-f_avg) and pass negative gradients back to achieve min(0,f_avg)
         local relu_diff=G.relu:forward( diff )
