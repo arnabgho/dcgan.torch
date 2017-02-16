@@ -54,6 +54,9 @@ local trainHook = function(self, path)
    local input = loadImage(path)
    local iW = input:size(3)
    local iH = input:size(2)
+   if opt.data=='compositionalMNIST' then
+   	return input
+   end
 
    -- do random crop
    local oW = sampleSize[2];
@@ -63,6 +66,7 @@ local trainHook = function(self, path)
    local out = image.crop(input, w1, h1, w1 + oW, h1 + oH)
    assert(out:size(2) == oW)
    assert(out:size(3) == oH)
+   
    -- do hflip with probability 0.5
    --mirror removed for digits
    --if torch.uniform() > 0.5 then out = image.hflip(out); end
