@@ -341,11 +341,11 @@ for epoch = 1, opt.niter do
         end
     end
     if epoch % opt.save_freq==0 then	
-       paths.mkdir('checkpoints_classify_gen_n_alter')
+       paths.mkdir('checkpoints_compete_avg_gen_n_alter')
        --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
        --parametersG, gradParametersG = nil, nil
-       torch.save('checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G} )
-       torch.save('checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+       torch.save('checkpoint_compete_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G} )
+       torch.save('checkpoints_compete_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
     end	
     --parametersD, gradParametersD = netD:getParameters() -- reflatten the params and get them
     --parametersG, gradParametersG = netG:getParameters()
