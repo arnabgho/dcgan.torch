@@ -20,7 +20,7 @@ opt = {
     display = 1,            -- display samples while training. 0 = false
     display_id = 20,        -- display window id.
     gpu = 1,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-    name = 'experiment-classify_gen_n_alter',
+    name = 'compete_avg_gen_n_alter',
     noise = 'normal',       -- uniform / normal
     ngen = 2,               -- the number of generators generating images                
     ip='172.27.21.146',     -- the ip for display
@@ -326,7 +326,7 @@ for epoch = 1, opt.niter do
             disp.image(real,  {win=opt.display_id , title=opt.name})
             for i=1,ngen do
                 local fake=G['netG'..i]:forward(noise_vis)
-                disp.image(fake, {win=opt.display_id+i,title=opt.name })
+                disp.image(fake, {win=opt.display_id+i,title=opt.name .. i })
             end
         end
 

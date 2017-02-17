@@ -302,7 +302,7 @@ for epoch = 1, opt.niter do
             disp.image(real,  {win=opt.display_id , title=opt.name})
             for i=1,ngen do
                 local fake=G['netG'..i]:forward(noise_vis)
-                disp.image(fake, {win=opt.display_id+i,title=opt.name })
+                disp.image(fake, {win=opt.display_id+i,title=opt.name..i })
             end
         end
 
