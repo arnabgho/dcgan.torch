@@ -253,10 +253,6 @@ local fDx = function(x)
         local df_do = criterion:backward(output, label)
         netD:backward(input, df_do)
 
-        score_D_cache[i]=output
-        sum_score_D=sum_score_D+output
-        feature_cache[i]=netD.modules[11].output:reshape(opt.batchSize,512*4*4)
-
         if opt.noise == 'uniform' then 
             noise:uniform(-1,1)
         elseif opt.noise=='normal' then
@@ -268,6 +264,10 @@ local fDx = function(x)
         label:fill(fake_label)
 
         local output=netD:forward(input)
+        score_D_cache[i]=output
+        sum_score_D=sum_score_D+output
+        feature_cache[i]=netD.modules[11].output:reshape(opt.batchSize,512*4*4)
+
         errD=errD+criterion:forward(output,label)
         local df_do = criterion:backward(output,label)
         netD:backward(input,df_do)

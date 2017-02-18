@@ -253,10 +253,6 @@ local fDx = function(x)
         local df_do = criterion:backward(output, label)
         netD:backward(input, df_do)
 
-        score_D_cache[i]=output
-        sum_score_D=sum_score_D+output
-        feature_cache[i]=netD.modules[11].output:reshape(opt.batchSize,512*4*4)
-
         if opt.noise == 'uniform' then 
             noise:uniform(-1,1)
         elseif opt.noise=='normal' then
@@ -271,7 +267,11 @@ local fDx = function(x)
         errD=errD+criterion:forward(output,label)
         local df_do = criterion:backward(output,label)
         netD:backward(input,df_do)
-    end
+        score_D_cache[i]=output
+        sum_score_D=sum_score_D+output
+        feature_cache[i]=netD.modules[11].output:reshape(opt.batchSize,512*4*4)
+
+   end
     return errD,gradParametersD 
 end
 
@@ -295,9 +295,9 @@ local fGx = function(x)
     errG=0
     for i=1,ngen do
         local output = netD:forward(G['netG' .. i].output)
-        local zero_batch=torch.Tensor(output:size()):zero():cuda()
+        local zero_batch=torch.Tensor(output:size()):zero():cuda()	-- maybe in case of diff being positive perhaps push it towards max value
         local diff=ngen*output-sum_score_D-cosine_distance(feature_cache,i)
-        diff=-diff/(ngen-1)  -- to enable max(0,-f_avg) and pass negative gradients back to achieve min(0,f_avg)
+        diff=-diff/(ngen-1)  --if negative to enable max(0,-f_avg) and pass negative gradients back to achieve min(0,f_avg)
         local relu_diff=G.relu:forward( diff )
         errG = errG + criterion:forward(output,label) + compete_criterion:forward(relu_diff,zero_batch)
         local df_do = criterion:backward(output,label) + G.relu:backward(diff,compete_criterion:backward( relu_diff ,zero_batch )  ) -- negative sign since the sign was changed earlier
