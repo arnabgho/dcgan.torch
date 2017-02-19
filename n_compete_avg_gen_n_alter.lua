@@ -25,7 +25,8 @@ opt = {
     ngen = 2,               -- the number of generators generating images                
     ip='172.27.21.146',     -- the ip for display
     port=8000,		    -- the port for display
-    save_freq=5, 	    -- the frequency with which the parameters are saved
+    save_freq=5, 	    -- the frequency with which the parameters are saved  
+    lambda_compete=0.5
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -300,7 +301,7 @@ local fGx = function(x)
         diff=-diff/(ngen-1)  --if negative to enable max(0,-f_avg) and pass negative gradients back to achieve min(0,f_avg)
         local relu_diff=G.relu:forward( diff )
         errG = errG + criterion:forward(output,label) + compete_criterion:forward(relu_diff,zero_batch)
-        local df_do = criterion:backward(output,label) + G.relu:backward(diff,compete_criterion:backward( relu_diff ,zero_batch )  ) -- negative sign since the sign was changed earlier
+        local df_do = criterion:backward(output,label) +opt.lambda_compete* G.relu:backward(diff,compete_criterion:backward( relu_diff ,zero_batch )  ) -- negative sign since the sign was changed earlier
         local df_dg = netD:updateGradInput(G['netG'..i].output,df_do)
         G['netG'..i]:backward(noise,df_dg)
     end
