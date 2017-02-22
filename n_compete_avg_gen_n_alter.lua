@@ -26,7 +26,7 @@ opt = {
     ip='172.27.21.146',     -- the ip for display
     port=8000,		    -- the port for display
     save_freq=5, 	    -- the frequency with which the parameters are saved  
-    lambda_compete=0.5
+    lambda_compete=0.001
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
