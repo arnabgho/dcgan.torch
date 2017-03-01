@@ -342,6 +342,11 @@ for epoch = 1, opt.niter do
             errG and errG or -1, errD and errD or -1))
         end
     end
+    for i=1,ngen do
+	local fake=G['netG'..i]:forward(noise_vis)
+	image.save('checkpoint_classify_gen_n_alter_CMP/'.. 'gen_'..i .. '_epoch_'..epoch,fake)
+    end	
+
     if epoch % opt.save_freq==0 then	
        paths.mkdir('checkpoints_classify_gen_n_alter_CMP')
        --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
