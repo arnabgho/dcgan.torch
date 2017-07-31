@@ -22,6 +22,7 @@ opt = {
    noise = 'normal',       -- uniform / normal
    ip= '131.159.40.120',   -- ip
    port = 8000,            -- port
+   ngen=3,                 -- number of generators to use
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -56,12 +57,13 @@ local function weights_init(m)
    end
 end
 
+local ngen=opt.ngen
 local nc = 3
 local nz = opt.nz
 local ndf = opt.ndf
 local ngf = opt.ngf
-local real_label = 1
-local fake_label = 0
+local real_label = ngen+ 1
+local fake_labels = torch.linspace(1,ngen,ngen)
 
 local SpatialBatchNormalization = nn.SpatialBatchNormalization
 local SpatialConvolution = nn.SpatialConvolution
@@ -81,10 +83,17 @@ netG:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
 netG:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
 netG:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
 -- state size: (ngf) x 32 x 32
-netG:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
-netG:add(nn.Tanh())
--- state size: (nc) x 64 x 64
 
+local head=nn.Sequential()
+
+head:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
+head:add(nn.Tanh())
+-- state size: (nc) x 64 x 64
+local heads=nn.ConcatTable()
+for i=1,ngen do
+    heads:add(head:clone())
+end
+netG:add(heads)
 netG:apply(weights_init)
 
 local netD = nn.Sequential()
@@ -102,15 +111,15 @@ netD:add(SpatialBatchNormalization(ndf * 4)):add(nn.LeakyReLU(0.2, true))
 netD:add(SpatialConvolution(ndf * 4, ndf * 8, 4, 4, 2, 2, 1, 1))
 netD:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf*8) x 4 x 4
-netD:add(SpatialConvolution(ndf * 8, 1, 4, 4))
-netD:add(nn.Sigmoid())
+netD:add(SpatialConvolution(ndf * 8,ngen+ 1, 4, 4))
+--netD:add(nn.Sigmoid())
 -- state size: 1 x 1 x 1
-netD:add(nn.View(1):setNumInputDims(3))
+--netD:add(nn.View(1):setNumInputDims(3))
 -- state size: 1
 
 netD:apply(weights_init)
 
-local criterion = nn.BCECriterion()
+local criterion = nn.CrossEntropyCriterion()
 ---------------------------------------------------------------------------
 optimStateG = {
    learningRate = opt.lr,
@@ -159,32 +168,36 @@ end
 local fDx = function(x)
    gradParametersD:zero()
 
-   -- train with real
-   data_tm:reset(); data_tm:resume()
-   local real = data:getBatch()
-   data_tm:stop()
-   input:copy(real)
-   label:fill(real_label)
-
-   local output = netD:forward(input)
-   local errD_real = criterion:forward(output, label)
-   local df_do = criterion:backward(output, label)
-   netD:backward(input, df_do)
-
    -- train with fake
    if opt.noise == 'uniform' then -- regenerate random noise
        noise:uniform(-1, 1)
    elseif opt.noise == 'normal' then
        noise:normal(0, 1)
    end
-   local fake = netG:forward(noise)
-   input:copy(fake)
-   label:fill(fake_label)
-
-   local output = netD:forward(input)
-   local errD_fake = criterion:forward(output, label)
-   local df_do = criterion:backward(output, label)
-   netD:backward(input, df_do)
+   local fakes = netG:forward(noise)
+   local errD_fake=0
+   local errD_real=0
+   for i=1,ngen do
+       input:copy(fakes[i])
+       label:fill(fake_labels[i])
+    
+       local output = netD:forward(input)
+       errD_fake = errD_fake+ criterion:forward(output, label)
+       local df_do = criterion:backward(output, label)
+       netD:backward(input, df_do)
+    
+       -- train with real
+       data_tm:reset(); data_tm:resume()
+       local real = data:getBatch()
+       data_tm:stop()
+       input:copy(real)
+       label:fill(real_label)
+    
+       local output = netD:forward(input)
+       errD_real = errD_real + criterion:forward(output, label)
+       local df_do = criterion:backward(output, label)
+       netD:backward(input, df_do)
+   end
 
    errD = errD_real + errD_fake
 
@@ -200,13 +213,17 @@ local fGx = function(x)
    local fake = netG:forward(noise)
    input:copy(fake) ]]--
    label:fill(real_label) -- fake labels are real for generator cost
-
-   local output = netD.output -- netD:forward(input) was already executed in fDx, so save computation
-   errG = criterion:forward(output, label)
-   local df_do = criterion:backward(output, label)
-   local df_dg = netD:updateGradInput(input, df_do)
-
-   netG:backward(noise, df_dg)
+   errG=0
+   local df_dgs={}
+   for i=1,ngen do
+     local output = netD:forward(netG.output[i]) -- netD:forward(input) was already executed in fDx, so save computation
+     
+     errG =errG+ criterion:forward(output, label)
+     local df_do = criterion:backward(output, label)
+     local df_dg = netD:updateGradInput(netG.output[i], df_do)
+     table.insert(df_dgs,df_dg)
+   end
+   netG:backward(noise, df_dgs)
    return errG, gradParametersG
 end
 
@@ -225,10 +242,12 @@ for epoch = 1, opt.niter do
       -- display
       counter = counter + 1
       if counter % 10 == 0 and opt.display then
-          local fake = netG:forward(noise_vis)
+          local fakes = netG:forward(noise_vis)
           local real = data:getBatch()
-          disp.image(fake, {win=opt.display_id, title=opt.name})
-          disp.image(real, {win=opt.display_id * 3, title=opt.name})
+          disp.image(real, {win=opt.display_id, title=opt.name})
+          for i=1,ngen do
+             disp.image(fakes[i], {win=opt.display_id * 3 +i, title=opt.name})
+          end
       end
 
       -- logging
