@@ -224,7 +224,7 @@ function dataset:__init(...)
       local length = tonumber(sys.fexecute(wc .. " -l '"
                                               .. classFindFiles[i] .. "' |"
                                               .. cut .. " -f1 -d' '"))
-      if length == 0 then
+     if length == 0 then
          error('Class has zero samples')
       else
          self.classList[i] = torch.linspace(runningIndex + 1, runningIndex + length, length):long()

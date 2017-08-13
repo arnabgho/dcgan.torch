@@ -2,6 +2,7 @@ require 'torch'
 require 'nn'
 require 'optim'
 local model_utils = require 'util.model_utils'
+require 'nngraph'
 opt = {
    dataset = 'folder',       -- imagenet / lsun / folder
    batchSize = 64,
@@ -160,7 +161,7 @@ local SpatialConvolution = nn.SpatialConvolution
 local SpatialFullConvolution = nn.SpatialFullConvolution
 
 local G={}
-local G.netG1 = nn.Sequential()
+G.netG1 = nn.Sequential()
 -- input is Z, going into a convolution
 G.netG1:add(SpatialFullConvolution(nz, ngf * 8, 4, 4))
 G.netG1:add(SpatialBatchNormalization(ngf * 8)):add(nn.ReLU(true))
@@ -185,7 +186,7 @@ G.netG1:add(nn.Tanh())
 G.netG1:apply(weights_init)
 
 local D={}
-local D.netD1 = nn.Sequential()
+D.netD1 = nn.Sequential()
 
 -- input is (nc) x 128 x 128
 D.netD1:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
@@ -212,8 +213,8 @@ D.netD1:add(nn.View(1):setNumInputDims(3))
 D.netD1:apply(weights_init)
 
 for i=2,4 do
-    G['netG'..i]=G.netG1:clone()
-    D['netD'..i]=D.netG1:clone()
+    G['netG' .. i]=G.netG1:clone()
+    D['netD' .. i]=D.netD1:clone()
 end
 
 
@@ -253,14 +254,14 @@ local data_tm = torch.Timer()
 if opt.gpu > 0 then
    require 'cunn'
    cutorch.setDevice(opt.gpu)
-   input = input:cuda();  noise = noise:cuda();  label = label:cuda()
+   input = input:cuda(); input_combiner = input_combiner:cuda() ; noise = noise:cuda();  label = label:cuda()
 
-   if pcall(require, 'cudnn') then
-      require 'cudnn'
-      cudnn.benchmark = true
-      cudnn.convert(netG, cudnn)
-      cudnn.convert(netD, cudnn)
-   end
+   --if pcall(require, 'cudnn') then
+   --   require 'cudnn'
+   --   cudnn.benchmark = true
+   --   cudnn.convert(netG, cudnn)
+   --   cudnn.convert(netD, cudnn)
+   --end
    D_combiner:cuda();           G_combiner:cuda();           
    criterion:cuda()
    for k,net in pairs(G) do net:cuda() end
@@ -270,8 +271,8 @@ end
 local parametersD, gradParametersD = model_utils.combine_all_parameters(D)  --netD:getParameters()
 local parametersG, gradParametersG = model_utils.combine_all_parameters(G)  --netG:getParameters()
 
-local parametersD_combiner , gradParametersD_combiner=D_combiner.getParameters()
-local parametersG_combiner , gradParametersG_combiner=G_combiner.getParameters()
+local parametersD_combiner , gradParametersD_combiner=D_combiner:getParameters()
+local parametersG_combiner , gradParametersG_combiner=G_combiner:getParameters()
 
 if opt.display then disp = require 'display' end
 
@@ -297,7 +298,7 @@ local fDx = function(x)
 
    for i=1,2 do
       for j=1,2 do
-         input:copy( real[ {{} , { } , {  1 + (i-1)*opt.fineSize/2 , (i-1)*opt.fineSize/2 + opt.fineSize/2  } , {   1 + (j-1)*opt.fineSize/2 , (j-1)*opt.fineSize/2 + opt.fineSize/2 } }  ]  )
+         input:copy(real[ {{} , { } , {  1 + (i-1)*opt.fineSize/2 , (i-1)*opt.fineSize/2 + opt.fineSize/2  } , {   1 + (j-1)*opt.fineSize/2 , (j-1)*opt.fineSize/2 + opt.fineSize/2 } }  ])
    	     local output = D['netD'.. tostring( (i-1)*2+j ) ]:forward(input)
          errD_real = errD_real + criterion:forward(output, label)
          local df_do = criterion:backward(output, label)
@@ -320,7 +321,7 @@ local fDx = function(x)
          local output = D['netD'.. tostring( i-1 )*2 + j ] :forward(input)
          errD_fake = errD_fake + criterion:forward(output, label)
          local df_do = criterion:backward(output, label)
-         netD:backward(input, df_do)
+         D['netD' .. tostring(i-1)*2+j]:backward(input, df_do)
       end
    end
    errD = errD_real + errD_fake
@@ -370,7 +371,7 @@ local fGx_combiner=function(x)
 	local df_do=criterion:backward(output,label_combiner)
 	local df_dg=D_combiner:updateGradInput(G_combiner.output,df_do)
 		
-	local df_dg_combiner=G_combiner:backward(input_combiner,df_dg)
+	df_dg_combiner=G_combiner:backward(input_combiner,df_dg)
 	return errG_combiner, gradParametersG_combiner
 end
 
@@ -399,7 +400,7 @@ local fGx = function(x)
          errG=errG+opt.lambda*criterion:forward(output,label)
          local df_do=criterion:backward(output,label)
          local df_dg= opt.lambda* D['netD'..tostring( (i-1)*2+j )]:updateGradInput(  G['netG'.. tostring( (i-1)*2+j ) ].output , df_do  )
-         df_dg=df_dg + (1-opt.lambda)*df_dg_combiner[  {{} , { } , {  1 + (i-1)*opt.fineSize/2 , (i-1)*opt.fineSize/2 + opt.fineSize/2  } , {   1 + (j-1)*opt.fineSize/2 , (j-1)*opt.fineSize/2 + opt.fineSize/2 } }  ] = G['netG'.. tostring( (i-1)*2+j )  ]
+         df_dg=df_dg + (1-opt.lambda)*df_dg_combiner[  {{} , { } , {  1 + (i-1)*opt.fineSize/2 , (i-1)*opt.fineSize/2 + opt.fineSize/2  } , {   1 + (j-1)*opt.fineSize/2 , (j-1)*opt.fineSize/2 + opt.fineSize/2 } }  ]
          G['netG'..tostring( (i-1)*2+j )]:backward(noise,df_dg)
       end	
    end
@@ -430,8 +431,9 @@ for epoch = 1, opt.niter do
 		  
           for j=1,2 do
              for k=1,2 do
-                input_combiner[    {{} , { } , {  1 + (i-1)*opt.fineSize/2 , (i-1)*opt.fineSize/2 + opt.fineSize/2  } , {   1 + (j-1)*opt.fineSize/2 , (j-1)*opt.fineSize/2 + opt.fineSize/2 } }  ] = G['netG'.. tostring( (i-1)*2+j )   ] = G['netG'.. tostring(j-1)*k]:forward(noise_vis)
-             end
+                local fake= G['netG'.. tostring((j-1)*2+k)]:forward(noise_vis)
+                input_combiner[    {{} , { } , {  1 + (j-1)*opt.fineSize/2 , (j-1)*opt.fineSize/2 + opt.fineSize/2  } , {   1 + (k-1)*opt.fineSize/2 , (k-1)*opt.fineSize/2 + opt.fineSize/2 } }  ] = fake           
+            end
           end
           local fake=G_combiner:forward(input_combiner)
           disp.image(fake,{win=opt.display_id+1,title='final_image'})
@@ -441,17 +443,17 @@ for epoch = 1, opt.niter do
       -- logging
       if ((i-1) / opt.batchSize) % 1 == 0 then
          print(('Epoch: [%d][%8d / %8d]\t Time: %.3f  DataTime: %.3f  '
-                   .. '  Err_G: %.4f  Err_D: %.4f'):format(
+                   .. '  Err_G: %.4f  Err_D: %.4f Err_G_combiner: %.4f Err_D_combiner: %.4f'):format(
                  epoch, ((i-1) / opt.batchSize),
                  math.floor(math.min(data:size(), opt.ntrain) / opt.batchSize),
                  tm:time().real, data_tm:time().real,
-                 errG and errG or -1, errD and errD or -1))
+                 errG and errG or -1, errD and errD or -1 , errG_combiner and errG_combiner or -1, errD_combiner and errD_combiner or -1  ))
       end
    end
    paths.mkdir('jigsaw_checkpoints')
    --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
    --parametersG, gradParametersG = nil, nil
-   torch.save('jigsaw_checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G}))
+   torch.save('jigsaw_checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G})
    torch.save('jigsaw_checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D.t7', {D=D})
    torch.save('jigsaw_checkpoints/' .. opt.name .. '_' .. epoch .. '_net_G_combiner.t7', G_combiner)
    torch.save('jigsaw_checkpoints/' .. opt.name .. '_' .. epoch .. '_net_D_combiner.t7', D_combiner)
