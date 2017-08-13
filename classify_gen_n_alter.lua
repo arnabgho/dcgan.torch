@@ -319,11 +319,11 @@ for epoch = 1, opt.niter do
         end
     end
     if epoch % opt.save_freq==0 then	
-       paths.mkdir('checkpoints_classify_gen_n_alter')
+       paths.mkdir('original_checkpoints_classify_gen_n_alter')
        --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
        --parametersG, gradParametersG = nil, nil
-       torch.save('checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G} )
-       torch.save('checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+       torch.save('original_checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G} )
+       torch.save('original_checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
     end
     --for i=1,ngen do
 	--    local fake=G['netG'..i]:forward(noise_vis)

@@ -82,11 +82,11 @@ G.netG1:add(SpatialBatchNormalization(ngf * 4)):add(nn.ReLU(true))
 G.netG1:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
 G.netG1:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
 -- state size: (ngf*2) x 16 x 16
---G.netG1:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
-G.netG1:add(SpatialFullConvolution(ngf * 2, nc, 4, 4, 2, 2, 1, 1))
---G.netG1:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
+G.netG1:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
+--G.netG1:add(SpatialFullConvolution(ngf * 2, nc, 4, 4, 2, 2, 1, 1))
+G.netG1:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
 -- state size: (ngf) x 32 x 32
---G.netG1:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
+G.netG1:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
 G.netG1:add(nn.Tanh())
 -- state size: (nc) x 64 x 64
 
@@ -110,11 +110,11 @@ end
 local netD = nn.Sequential()
 
 -- input is (nc) x 64 x 64
---netD:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
---netD:add(nn.LeakyReLU(0.2, true))
+netD:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
+netD:add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf) x 32 x 32
---netD:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
-netD:add(SpatialConvolution(nc, ndf * 2, 4, 4, 2, 2, 1, 1))
+netD:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
+--netD:add(SpatialConvolution(nc, ndf * 2, 4, 4, 2, 2, 1, 1))
 netD:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf*2) x 16 x 16
 netD:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
@@ -130,24 +130,23 @@ netD:add(SpatialConvolution(ndf * 8, ngen+1, 4, 4))
 -- state size: 1
 
 netD:apply(weights_init)
-
 local netD_patch = nn.Sequential()
 
 -- input is (nc) x 64 x 64
---netD_patch:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
---netD_patch:add(nn.LeakyReLU(0.2, true))
+netD_patch:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
+netD_patch:add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf) x 32 x 32
---netD_patch:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
-netD_patch:add(SpatialConvolution(nc, ndf * 2, 4, 4, 2, 2, 1, 1))
+netD_patch:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
+--netD_patch:add(SpatialConvolution(nc, ndf * 2, 4, 4, 2, 2, 1, 1))
 netD_patch:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf*2) x 16 x 16
 netD_patch:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
 netD_patch:add(SpatialBatchNormalization(ndf * 4)):add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf*4) x 8 x 8
 netD_patch:add(SpatialConvolution(ndf * 4, ndf * 8, 4, 4, 2, 2, 1, 1))
---netD_patch:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
+netD_patch:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf*8) x 4 x 4
---netD_patch:add(SpatialConvolution(ndf * 8, ngen+1, 4, 4))
+netD_patch:add(SpatialConvolution(ndf * 8,1, 4, 4))
 netD_patch:add(nn.Sigmoid())
 -- state size: 1 x 1 x 1
 --netD_patch:add(nn.View(1):setNumInputDims(3))
@@ -169,10 +168,14 @@ optimStateD = {
     learningRate = opt.lr,
     beta1 = opt.beta1,
 }
+optimStateD_patch = {
+    learningRate = opt.lr,
+    beta1 = opt.beta1,
+}
 ----------------------------------------------------------------------------
 local input = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 local label = torch.Tensor(opt.batchSize)
-local errD, errG
+local errD, errD_patch , errG
 local epoch_tm = torch.Timer()
 local tm = torch.Timer()
 local data_tm = torch.Timer()
@@ -274,7 +277,7 @@ local fake_label_patch=0
 
 local fDx_patch = function(x)
     gradParametersD_patch:zero()
-    
+    local real=data:getBatch() 
     input:copy(real)
 
     local output = netD_patch:forward(input)
@@ -284,12 +287,14 @@ local fDx_patch = function(x)
     local df_do=criterion_patch:backward(output,label_patch)
     netD_patch:backward(input,df_do)
 
-    local id=torch.random(1,ngen)
-    local fake=G['netG'..i].output
+    local ids=torch.Tensor(opt.batchSize):random(1,ngen)
+    local fake=input:clone()
+    for i=1,opt.batchSize do
+        fake[i]=G['netG'.. tostring( ids[i] ) ].output[i]
+    end
     input:copy(fake)
-    
     label_patch:fill(fake_label_patch)
-    errD_patch= criterion_patch:forward(output,label_patch)
+    errD_patch= errD_patch + criterion_patch:forward(output,label_patch)
     local df_do=criterion_patch:backward(output,label_patch)
     netD_patch:backward(input,df_do)
 
@@ -309,12 +314,12 @@ local fGx = function(x)
         local df_dg = opt.lambda * netD:updateGradInput(G['netG'..i].output,df_do)
         G['netG'..i]:backward(noise,df_dg)
 
-        local output = netD_patch:forward( G['netG'..i].output )
-        local label_patch=output:clone()
+        local output_patch = netD_patch:forward( G['netG'..i].output )
+        local label_patch=output_patch:clone()
         label_patch:fill(real_label_patch)
-        errG=errG+ (1-opt.lambda)*criterion_patch:forward(output,label_patch)
-        local df_do= criterion_patch:backward(output,label_patch)
-        df_dg=df_dg+ (1-opt.lambda)*netD_patch:updateGradInput( G['netG'..i].output,df_do )
+        errG=errG+ (1-opt.lambda)*criterion_patch:forward(output_patch,label_patch)
+        local df_do_patch= criterion_patch:backward(output_patch,label_patch)
+        df_dg=df_dg+ (1-opt.lambda)*netD_patch:updateGradInput( G['netG'..i].output,df_do_patch )
     end
     return errG, gradParametersG
 end
@@ -328,7 +333,7 @@ for epoch = 1, opt.niter do
         -- (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
         optim.adam(fDx, parametersD, optimStateD)
 
-        optim.adam(fDx_patch, parametersD_patch, optimStateD)
+        optim.adam(fDx_patch, parametersD_patch, optimStateD_patch)
         -- (2) Update G network: maximize log(D(G(z)))
         optim.adam(fGx, parametersG, optimStateG)
 
@@ -346,20 +351,20 @@ for epoch = 1, opt.niter do
         -- logging
         if ((i-1) / opt.batchSize) % 1 == 0 then
             print(('Epoch: [%d][%8d / %8d]\t Time: %.3f  DataTime: %.3f  '
-            .. '  Err_G: %.4f  Err_D: %.4f'):format(
+            .. '  Err_G: %.4f  Err_D: %.4f ErrD_patch: %.4f'):format(
             epoch, ((i-1) / opt.batchSize),
             math.floor(math.min(data:size(), opt.ntrain) / opt.batchSize),
             tm:time().real, data_tm:time().real,
-            errG and errG or -1, errD and errD or -1))
+            errG and errG or -1, errD and errD or -1, errD_patch and errD_patch or -1 ))
         end
     end
     if epoch % opt.save_freq==0 then	
-       paths.mkdir('checkpoints_classify_gen_n_alter')
+       paths.mkdir('patch_checkpoints_classify_gen_n_alter')
        --parametersD, gradParametersD = nil, nil -- nil them to avoid spiking memory
        --parametersG, gradParametersG = nil, nil
-       torch.save('checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G} )
-       torch.save('checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
-       torch.save('checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_D_patch.t7', netD_patch )
+       torch.save('patch_checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_G.t7', {G=G} )
+       torch.save('patch_checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD )
+       torch.save('patch_checkpoints_classify_gen_n_alter/' .. opt.name .. '_' .. epoch .. '_net_D_patch.t7', netD_patch )
     end
     --for i=1,ngen do
 	--    local fake=G['netG'..i]:forward(noise_vis)
