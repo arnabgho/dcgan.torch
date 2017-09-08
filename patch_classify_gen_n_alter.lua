@@ -82,11 +82,11 @@ G.netG1:add(SpatialBatchNormalization(ngf * 4)):add(nn.ReLU(true))
 G.netG1:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
 G.netG1:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
 -- state size: (ngf*2) x 16 x 16
-G.netG1:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
---G.netG1:add(SpatialFullConvolution(ngf * 2, nc, 4, 4, 2, 2, 1, 1))
-G.netG1:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
+--G.netG1:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
+G.netG1:add(SpatialFullConvolution(ngf * 2, nc, 4, 4, 2, 2, 1, 1))
+--G.netG1:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
 -- state size: (ngf) x 32 x 32
-G.netG1:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
+--G.netG1:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
 G.netG1:add(nn.Tanh())
 -- state size: (nc) x 64 x 64
 
@@ -110,11 +110,11 @@ end
 local netD = nn.Sequential()
 
 -- input is (nc) x 64 x 64
-netD:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
-netD:add(nn.LeakyReLU(0.2, true))
+--netD:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
+--netD:add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf) x 32 x 32
-netD:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
---netD:add(SpatialConvolution(nc, ndf * 2, 4, 4, 2, 2, 1, 1))
+--netD:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
+netD:add(SpatialConvolution(nc, ndf * 2, 4, 4, 2, 2, 1, 1))
 netD:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf*2) x 16 x 16
 netD:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
@@ -133,11 +133,11 @@ netD:apply(weights_init)
 local netD_patch = nn.Sequential()
 
 -- input is (nc) x 64 x 64
-netD_patch:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
-netD_patch:add(nn.LeakyReLU(0.2, true))
+--netD_patch:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
+--netD_patch:add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf) x 32 x 32
-netD_patch:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
---netD_patch:add(SpatialConvolution(nc, ndf * 2, 4, 4, 2, 2, 1, 1))
+--netD_patch:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
+netD_patch:add(SpatialConvolution(nc, ndf * 2, 4, 4, 2, 2, 1, 1))
 netD_patch:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf*2) x 16 x 16
 netD_patch:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
@@ -241,7 +241,7 @@ local fDx = function(x)
     -- Might try a version in which n batches of real data along with 1 batch each from the generators
     -- train with real
     data_tm:reset(); data_tm:resume()
-
+    errD=0
     for i=1,ngen do
         local real = data:getBatch()
         data_tm:stop()
@@ -249,7 +249,7 @@ local fDx = function(x)
         label:fill(real_label)
     
         local output = netD:forward(input)
-        errD = criterion:forward(output, label)
+        errD =errD+ criterion:forward(output, label)
         local df_do = criterion:backward(output, label)
         netD:backward(input, df_do)
 
@@ -277,27 +277,31 @@ local fake_label_patch=0
 
 local fDx_patch = function(x)
     gradParametersD_patch:zero()
-    local real=data:getBatch() 
-    input:copy(real)
+    errD_patch=0
+    for i=1,opt.ngen do
+        local real=data:getBatch() 
+        input:copy(real)
 
-    local output = netD_patch:forward(input)
-    local label_patch=output:clone()
-    label_patch:fill(real_label_patch)
-    errD_patch= criterion_patch:forward(output,label_patch)
-    local df_do=criterion_patch:backward(output,label_patch)
-    netD_patch:backward(input,df_do)
+        local output = netD_patch:forward(input)
+        local label_patch=output:clone()
+        label_patch:fill(real_label_patch)
+        errD_patch=errD_patch+ criterion_patch:forward(output,label_patch)
+        local df_do=criterion_patch:backward(output,label_patch)
+        netD_patch:backward(input,df_do)
 
-    local ids=torch.Tensor(opt.batchSize):random(1,ngen)
-    local fake=input:clone()
-    for i=1,opt.batchSize do
-        fake[i]=G['netG'.. tostring( ids[i] ) ].output[i]
+        --local ids=torch.Tensor(opt.batchSize):random(1,ngen)
+        --local fake=input:clone()
+        --for i=1,opt.batchSize do
+        --    fake[i]=G['netG'.. tostring( ids[i] ) ].output[i]
+        --end
+        fake=G['netG'..i].output
+        input:copy(fake)
+        local output = netD_patch:forward(input)
+        label_patch:fill(fake_label_patch)
+        errD_patch= errD_patch + criterion_patch:forward(output,label_patch)
+        local df_do=criterion_patch:backward(output,label_patch)
+        netD_patch:backward(input,df_do)
     end
-    input:copy(fake)
-    label_patch:fill(fake_label_patch)
-    errD_patch= errD_patch + criterion_patch:forward(output,label_patch)
-    local df_do=criterion_patch:backward(output,label_patch)
-    netD_patch:backward(input,df_do)
-
     return errD_patch, gradParametersD_patch
 end
 
@@ -312,7 +316,7 @@ local fGx = function(x)
         local df_do = criterion:backward(output,label)
 
         local df_dg = opt.lambda * netD:updateGradInput(G['netG'..i].output,df_do)
-        G['netG'..i]:backward(noise,df_dg)
+        --G['netG'..i]:backward(noise,df_dg)
 
         local output_patch = netD_patch:forward( G['netG'..i].output )
         local label_patch=output_patch:clone()
@@ -320,6 +324,7 @@ local fGx = function(x)
         errG=errG+ (1-opt.lambda)*criterion_patch:forward(output_patch,label_patch)
         local df_do_patch= criterion_patch:backward(output_patch,label_patch)
         df_dg=df_dg+ (1-opt.lambda)*netD_patch:updateGradInput( G['netG'..i].output,df_do_patch )
+        G['netG'..i]:backward(noise,df_dg)
     end
     return errG, gradParametersG
 end

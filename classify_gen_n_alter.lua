@@ -238,7 +238,7 @@ local fDx = function(x)
     -- Might try a version in which n batches of real data along with 1 batch each from the generators
     -- train with real
     data_tm:reset(); data_tm:resume()
-
+    errD=0
     for i=1,ngen do
         local real = data:getBatch()
         data_tm:stop()
@@ -246,7 +246,7 @@ local fDx = function(x)
         label:fill(real_label)
     
         local output = netD:forward(input)
-        errD = criterion:forward(output, label)
+        errD = errD+ criterion:forward(output, label)
         local df_do = criterion:backward(output, label)
         netD:backward(input, df_do)
 
