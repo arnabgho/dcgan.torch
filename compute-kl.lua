@@ -9,7 +9,7 @@ require 'paths'
 
 local opt = lapp[[
    -s,--save          (default "/mnt/raid/arnab/stacked-mnist")      subdirectory to save logs
-   -n,--network       (default "/mnt/raid/arnab/stacked-mnist/")          reload pretrained network
+   -n,--network       (default "/mnt/raid/arnab/stacked-mnist/mnist.net")          reload pretrained network
    -m,--model         (default "convnet")   type of model tor train: convnet | mlp | linear
    -f,--full                                use the full dataset
    -p,--plot                                plot while training
@@ -38,37 +38,45 @@ model = torch.load(opt.network)
 print('<mnist> using model:')
 print(model)
 local counts=torch.Tensor(1000):zero()
-files=0
+local files=0
+local val=0
 if opt.gen~=0 then
-    for img_name in paths.files(opt.directory..'/gen_'+str(opt.gen)) do
+    for img_name in paths.files() do
         if paths.extname(img_name=='png') then
-            img=image.load(img_name)
+            img=image.load(opt.directory..'/gen_'+str(opt.gen) .. '/'..img_name)
             val=0
+            img=img:float()
             for i=1,3 do
-                pred=model:forward(img[i])
-                val=val*10+(pred%10)
-            end
-        end
-        val=val+1
-        counts[val]=counts[val]+1
-        files=files+1
-        print(files)
-    end
-else
-    for dir in paths.dir(opt.directory) do
-        for img_name in paths.files(dir) do
-            if paths.extname(img_name=='png') then
-                img=image.load(img_name)
-                val=0
-                for i=1,3 do
-                    pred=model:forward(img[i])
-                    val=val*10+(pred%10)
-                end
+                _,pred=model:forward(img[i]:reshape(1,32,32)):max(1)
+                val=val*10+(pred[1]%10)
             end
             val=val+1
             counts[val]=counts[val]+1
             files=files+1
             print(files)
+        end
+    end
+else
+    for dir in paths.iterdirs(opt.directory) do
+        print(dir)
+        local dir_count=0
+        for img_name in paths.files(opt.directory..'/'..dir) do
+            if paths.extname(img_name)=='png' then
+                img=image.load(opt.directory..'/'..dir..'/'..img_name)
+                val=0
+                img=img:float()
+                for i=1,3 do
+                    _,pred=model:forward(img[i]:reshape(1,32,32)):max(1)
+                    val=val*10+(pred[1]%10)
+                    print(pred)
+                end
+                val=val+1
+                counts[val]=counts[val]+1
+                files=files+1
+                dir_count=dir_count+1
+                print(files)
+            end
+            --f dir_count==5000 then break end
         end
     end
 end
@@ -80,10 +88,10 @@ num_non_zero=0
 for i=1,1000 do
     if counts[i]>1e-3 then
         num_non_zero=num_non_zero+1
-        kl=kl+probs[i]*log(probs[i]/uniform)
+        kl=kl+probs[i]*torch.log(probs[i]/uniform)
     end
 end
-
+print(counts)
 print("KL Divergence:")
 print(kl)
 print("Number of modes covered:")
