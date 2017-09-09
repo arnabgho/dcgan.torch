@@ -26,6 +26,7 @@ opt = {
     ip='131.159.40.120',     -- the ip for display
     port=8000,		    -- the port for display
     save_freq=5, 	    -- the frequency with which the parameters are saved
+    nc=3
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -55,7 +56,7 @@ local function weights_init(m)
     end
 end
 
-local nc = 3
+local nc = opt.nc
 local nz = opt.nz
 local ndf = opt.ndf
 local ngf = opt.ngf
@@ -81,47 +82,16 @@ G.netG1:add(SpatialBatchNormalization(ngf * 4)):add(nn.ReLU(true))
 G.netG1:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
 G.netG1:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
 -- state size: (ngf*2) x 16 x 16
---G.netG1:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
-G.netG1:add(SpatialFullConvolution(ngf * 2, nc, 4, 4, 2, 2, 1, 1))
---G.netG1:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
+G.netG1:add(SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
+--G.netG1:add(SpatialFullConvolution(ngf * 2, nc, 4, 4, 2, 2, 1, 1))
+G.netG1:add(SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
 -- state size: (ngf) x 32 x 32
---G.netG1:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
+G.netG1:add(SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
 G.netG1:add(nn.Tanh())
 -- state size: (nc) x 64 x 64
 
 G.netG1:apply(weights_init)
 
-
-
---G.netI1 = nn.Sequential()
---
----- input is (nc) x 64 x 64
---G.netI1:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
---G.netI1:add(nn.LeakyReLU(0.2, true))
----- state size: (ndf) x 32 x 32
---G.netI1:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
---G.netI1:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
----- state size: (ndf*2) x 16 x 16
---G.netI1:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
---G.netI1:add(SpatialBatchNormalization(ndf * 4)):add(nn.LeakyReLU(0.2, true))
----- state size: (ndf*4) x 8 x 8
---G.netI1:add(SpatialConvolution(ndf * 4, ndf * 8, 4, 4, 2, 2, 1, 1))
---G.netI1:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
----- state size: (ndf*8) x 4 x 4
---G.netI1:add(SpatialConvolution(ndf * 8, nmsg, 4, 4))
---G.netI1:add(SpatialBatchNormalization(nmsg))
-----G.netI:add(nn.Sigmoid())
----- state size: nmsg x 1 x 1
-----G.netI:add(nn.View(nmsg):setNumInputDims(3))
----- state size: 1
---
---G.netI1:apply(weights_init)
---
---G.netM1 = nn.Sequential()
---G.netM1:add(nn.Linear((nz-nmsg)+nmsg+nmsg,nmsg))
---G.netM1:add(nn.BatchNormalization(nmsg))
---
---G.netM1:apply(weights_init)
 
 for i=2,ngen do
     G['netG' .. i]=G.netG1:clone()
@@ -140,11 +110,11 @@ end
 local netD = nn.Sequential()
 
 -- input is (nc) x 64 x 64
---netD:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
+netD:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
 --netD:add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf) x 32 x 32
---netD:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
-netD:add(SpatialConvolution(nc, ndf * 2, 4, 4, 2, 2, 1, 1))
+netD:add(SpatialConvolution(ndf, ndf * 2, 4, 4, 2, 2, 1, 1))
+--netD:add(SpatialConvolution(nc, ndf * 2, 4, 4, 2, 2, 1, 1))
 netD:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
 -- state size: (ndf*2) x 16 x 16
 netD:add(SpatialConvolution(ndf * 2, ndf * 4, 4, 4, 2, 2, 1, 1))
@@ -173,7 +143,7 @@ optimStateD = {
     beta1 = opt.beta1,
 }
 ----------------------------------------------------------------------------
-local input = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
+local input = torch.Tensor(opt.batchSize, opt.nc, opt.fineSize, opt.fineSize)
 local label = torch.Tensor(opt.batchSize)
 local errD, errG
 local epoch_tm = torch.Timer()
@@ -242,6 +212,7 @@ local fDx = function(x)
     for i=1,ngen do
         local real = data:getBatch()
         data_tm:stop()
+        if opt.nc==1 then real=real[{ {} , {1} , {} ,{}  }] end
         input:copy(real)
         label:fill(real_label)
     

@@ -62,7 +62,7 @@ for iter=1,opt.nsamples,opt.batchSize do
     for i=1,opt.ngen do
         paths.mkdir(opt.name..'/gen_'..tostring(i))
         local images_Gi = G['netG'..i]:forward(noise)
-        --print('Images size: ', images_G1:size(1)..' x '..images_G1:size(2) ..' x '..images_G1:size(3)..' x '..images_G1:size(4))
+        --print('Images size: ', images_Gi:size(1)..' x '..images_Gi:size(2) ..' x '..images_Gi:size(3)..' x '..images_Gi:size(4))
         images_Gi:add(1):mul(0.5)
         --print('Min, Max, Mean, Stdv', images_G1:min(), images_G1:max(), images_G1:mean(), images_G1:std())
 
