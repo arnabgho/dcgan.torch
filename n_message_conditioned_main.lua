@@ -74,7 +74,7 @@ local SpatialFullConvolution = nn.SpatialFullConvolution
 
 
 local G={}
-G.netG1 = nn.Sequential()
+G.netG1 = nn.Sequential()  -- generator
 -- input is Z, going into a convolution
 G.netG1:add(SpatialFullConvolution(nz, ngf * 8, 4, 4))
 G.netG1:add(SpatialBatchNormalization(ngf * 8)):add(nn.ReLU(true))
@@ -96,7 +96,7 @@ G.netG1:apply(weights_init)
 
 
 
-G.netI1 = nn.Sequential()
+G.netI1 = nn.Sequential()  -- provisional message Generator
 
 -- input is (nc) x 64 x 64
 G.netI1:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
@@ -120,7 +120,7 @@ G.netI1:add(SpatialBatchNormalization(nmsg))
 
 G.netI1:apply(weights_init)
 
-G.netM1 = nn.Sequential()
+G.netM1 = nn.Sequential() -- Encoder
 G.netM1:add(nn.Linear((nz-nmsg)+nmsg+nmsg,nmsg))
 G.netM1:add(nn.BatchNormalization(nmsg))
 
@@ -140,7 +140,7 @@ G.reducer:add(nn.SplitTable(1,2))
 G.reducer:add(nn.Sequencer(nn.LSTM( nmsg , nmsg )  ))
 G.reducer:add(nn.SelectTable(-1))
 
-local netD = nn.Sequential()
+local netD = nn.Sequential() -- discriminator
 
 -- input is (nc) x 64 x 64
 netD:add(SpatialConvolution(nc, ndf, 4, 4, 2, 2, 1, 1))
@@ -180,14 +180,14 @@ local errD, errG
 local epoch_tm = torch.Timer()
 local tm = torch.Timer()
 local data_tm = torch.Timer()
-local message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local noise = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)
-local noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1)
-local prev_message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
-local prev_noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1)
-local prev_mapped_message_cache = torch.Tensor(opt.batchSize,ngen,nmsg)
-local prev_fake_cache = torch.Tensor(ngen,opt.batchSize, 3, opt.fineSize, opt.fineSize)
-local provisional_message_cache = torch.Tensor(ngen,opt.batchSize,nmsg,1,1):normal(0,1)
+local message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1) -- output of reducer (to train generator)
+local noise = torch.Tensor(opt.batchSize, nz - nmsg , 1, 1)  -- created for each generator while training discriminator (to train discriminator)
+local noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1) -- copy of noise (above) for each generator (to train generator)
+local prev_message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1) -- previous message (to train Encoder)
+local prev_noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1) -- previous noise_cache (to train Encoder)
+local prev_mapped_message_cache = torch.Tensor(opt.batchSize,ngen,nmsg) -- output of encoder (to train reducer)
+local prev_fake_cache = torch.Tensor(ngen,opt.batchSize, 3, opt.fineSize, opt.fineSize) -- output of generator (to train message generator)
+local provisional_message_cache = torch.Tensor(ngen,opt.batchSize,nmsg,1,1):normal(0,1) -- output of message generator (to train encoder)
 ----------------------------------------------------------------------------
 if opt.gpu > 0 then
     require 'cunn'
