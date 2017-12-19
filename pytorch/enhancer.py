@@ -13,7 +13,7 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 from torch.autograd import Variable
 import visdom
-from . import networks
+from networks import *
 vis = visdom.Visdom()
 vis.env = 'enhancer'
 
@@ -36,7 +36,7 @@ parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='.', help='folder to output images and model checkpoints')
+parser.add_argument('--outf', default='./enhanced/', help='folder to output images and model checkpoints')
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 
 opt = parser.parse_args()
@@ -190,14 +190,15 @@ if opt.netD != '':
     netD.load_state_dict(torch.load(opt.netD))
 print(netD)
 
-netE = networks.UnetGenerator(3, 3, 6, ngf, norm_layer='batch', use_dropout=False, gpu_ids=[ngpu])
-networks.init_weights(netE)
+netE = UnetGenerator(3, 3, 6, ngf, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=[ngpu])
+init_weights(netE)
 criterion = nn.CrossEntropyLoss()  #nn.BCELoss()
 
+print(netE)
 input = torch.FloatTensor(opt.batchSize, 3, opt.imageSize, opt.imageSize)
 noise = torch.FloatTensor(opt.batchSize, nz, 1, 1)
 fixed_noise = torch.FloatTensor(opt.batchSize, nz, 1, 1).normal_(0, 1)
-label = torch.FloatTensor(opt.batchSize)
+label = torch.LongTensor(opt.batchSize)  #torch.FloatTensor(opt.batchSize)
 real_label = 1
 fake_label = 0
 enhanced_label=2
@@ -254,10 +255,10 @@ for epoch in range(opt.niter):
 
         labelv = Variable( label.fill_( enhanced_label )  )
         enhanced= netE(fake)
-        output = netE(enhanced.detach())
-        errD_enhance= criterion(output,labelv)
-        errD_enhance.backward()
-        errD = errD_real + errD_fake + errD_enhance
+        output = netD(enhanced.detach())
+        errD_enhanced= criterion(output,labelv)
+        errD_enhanced.backward()
+        errD = errD_real + errD_fake + errD_enhanced
         optimizerD.step()
 
         D_E_G_z1=output.data.mean()
