@@ -303,11 +303,11 @@ for epoch in range(opt.niter):
                     '%s/real_samples.png' % opt.outf,
                     normalize=True)
             fake = netG(fixed_noise)
-            enhancd=netE(fake)
+            enhanced=netE(fake)
             vutils.save_image(fake.data,
                     '%s/fake_samples_epoch_%03d.png' % (opt.outf, epoch),
                     normalize=True)
-            vutils.save_image(fake.data,
+            vutils.save_image(enhanced.data,
                     '%s/enhanced_samples_epoch_%03d.png' % (opt.outf, epoch),
                     normalize=True)
     # do checkpointing
