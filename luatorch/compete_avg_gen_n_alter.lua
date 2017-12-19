@@ -207,22 +207,22 @@ local fDx = function(x)
     data_tm:reset(); data_tm:resume()
     sum_score_D:zero()
     errD=0
-    for i=1,ngen do
-        local real = data:getBatch()
-        data_tm:stop()
-        input:copy(real)
-        label:fill(real_label)
+    local real = data:getBatch()
+    data_tm:stop()
+    input:copy(real)
+    label:fill(real_label)
    
-        local output = netD:forward(input)
-        errD = errD+ criterion:forward(output, label)
-        local df_do = criterion:backward(output, label)
-        netD:backward(input, df_do)
+    local output = netD:forward(input)
+    errD = errD+ criterion:forward(output, label)
+    local df_do = criterion:backward(output, label)
+    netD:backward(input, df_do)
+    if opt.noise == 'uniform' then 
+        noise:uniform(-1,1)
+    elseif opt.noise=='normal' then
+        noise:normal(0,1)
+    end
 
-        if opt.noise == 'uniform' then 
-            noise:uniform(-1,1)
-        elseif opt.noise=='normal' then
-            noise:normal(0,1)
-        end
+    for i=1,ngen do
         noise_cache[i]=noise
         local fake=G['netG'..i]:forward( noise)
         input:copy(fake)
@@ -265,8 +265,8 @@ local fGx = function(x)
         local relu_diff=G.relu:forward( diff )
         errG = errG + criterion:forward(output,label) + opt.lambda_compete*compete_criterion:forward(relu_diff,zero_batch)
         
-        local compete_df_do=G.relu:backward( diff , compete_criterion:backward( relu_diff , zero_batch )  )
-        local df_do = criterion:backward(output,label) + opt.lambda_compete*compete_df_do
+        local compete_df_do=opt.lambda_compete*G.relu:backward( diff , compete_criterion:backward( relu_diff , zero_batch )  )
+        local df_do = criterion:backward(output,label) + compete_df_do
         local df_dg = netD:updateGradInput(G['netG'..i].output,df_do)
         G['netG'..i]:backward(noise,df_dg)
     end
