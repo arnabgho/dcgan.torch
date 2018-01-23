@@ -306,6 +306,7 @@ for epoch in range(opt.niter):
         errGs=[]
         for k in range(ngen):
             errGs.append(None)
+        netG_tail.zero_grad()
         for k in range(ngen):
             netG[k].zero_grad()
             netD.zero_grad()
