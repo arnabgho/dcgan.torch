@@ -13,9 +13,9 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 from torch.autograd import Variable
 import visdom
-from networks import *
+import numpy as np
 vis = visdom.Visdom()
-vis.env = 'enhancer'
+vis.env = 'dcgan_noisy_labels'
 
 
 
@@ -36,7 +36,7 @@ parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='./enhanced/', help='folder to output images and model checkpoints')
+parser.add_argument('--outf', default='./dcgan_noisy_labels', help='folder to output images and model checkpoints')
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 
 opt = parser.parse_args()
@@ -171,8 +171,8 @@ class _netD(nn.Module):
             nn.BatchNorm2d(ndf * 8),
             nn.LeakyReLU(0.2, inplace=True),
             # state size. (ndf*8) x 4 x 4
-            nn.Conv2d(ndf * 8, 3, 4, 1, 0, bias=False),
-            #nn.Sigmoid()
+            nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False),
+            nn.Sigmoid()
         )
 
     def forward(self, input):
@@ -181,7 +181,7 @@ class _netD(nn.Module):
         else:
             output = self.main(input)
 
-        return output.view(-1, 3)
+        return output.view(-1, 1).squeeze(1)
 
 
 netD = _netD(ngpu)
@@ -190,22 +190,18 @@ if opt.netD != '':
     netD.load_state_dict(torch.load(opt.netD))
 print(netD)
 
-netE = UnetGenerator(3, 3, 6, ngf, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=range(ngpu))
-init_weights(netE)
-criterion = nn.CrossEntropyLoss()  #nn.BCELoss()
+criterion = nn.BCELoss()
 
-print(netE)
 input = torch.FloatTensor(opt.batchSize, 3, opt.imageSize, opt.imageSize)
 noise = torch.FloatTensor(opt.batchSize, nz, 1, 1)
 fixed_noise = torch.FloatTensor(opt.batchSize, nz, 1, 1).normal_(0, 1)
-label = torch.LongTensor(opt.batchSize)  #torch.FloatTensor(opt.batchSize)
+label = torch.FloatTensor(opt.batchSize)
 real_label = 1
 fake_label = 0
-enhanced_label=2
+
 if opt.cuda:
     netD.cuda()
     netG.cuda()
-    netE.cuda()
     criterion.cuda()
     input, label = input.cuda(), label.cuda()
     noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
@@ -215,11 +211,9 @@ fixed_noise = Variable(fixed_noise)
 # setup optimizer
 optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-optimizerE = optim.Adam(netE.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 
 rec_win=None
 real_win=None
-enhanced_win=None
 for epoch in range(opt.niter):
     for i, data in enumerate(dataloader, 0):
         ############################
@@ -232,7 +226,8 @@ for epoch in range(opt.niter):
         if opt.cuda:
             real_cpu = real_cpu.cuda()
         input.resize_as_(real_cpu).copy_(real_cpu)
-        label.resize_(batch_size).fill_(real_label)
+        rand_multiplier=np.random.binomial(size=1, n=1, p= 0.5)[0]
+        label.resize_(batch_size).fill_(real_label*rand_multiplier)
         inputv = Variable(input)
         labelv = Variable(label)
 
@@ -245,24 +240,13 @@ for epoch in range(opt.niter):
         noise.resize_(batch_size, nz, 1, 1).normal_(0, 1)
         noisev = Variable(noise)
         fake = netG(noisev)
-        labelv = Variable(label.fill_(fake_label))
+        labelv = Variable(label.fill_(fake_label*(1-rand_multiplier)))
         output = netD(fake.detach())
         errD_fake = criterion(output, labelv)
         errD_fake.backward()
         D_G_z1 = output.data.mean()
-
-        # train with enhanced
-
-        labelv = Variable( label.fill_( enhanced_label )  )
-        enhanced= netE(fake.detach())            #netE(fake)
-        output = netD(enhanced.detach())
-        errD_enhanced= criterion(output,labelv)
-        errD_enhanced.backward()
-        errD = errD_real + errD_fake + errD_enhanced
+        errD = errD_real + errD_fake
         optimizerD.step()
-
-        D_E_G_z1=output.data.mean()
-
 
         ############################
         # (2) Update G network: maximize log(D(G(z)))
@@ -271,27 +255,10 @@ for epoch in range(opt.niter):
         labelv = Variable(label.fill_(real_label))  # fake labels are real for generator cost
         output = netD(fake)
         errG = criterion(output, labelv)
-        errG.backward(retain_variables=True)
+        errG.backward()
         D_G_z2 = output.data.mean()
-
-
-
-        ###############################
-        # (3) Update E network: maximize log(E(D(G(z))))
-        ###############################
-        netE.zero_grad()
-        labelv = Variable(label.fill_(real_label))  # fake labels are real for generator cost
-        output = netD(enhanced)
-        errE = criterion(output,labelv)
-        errE.backward()
-
-        D_E_G_z2 = output.data.mean()
-
         optimizerG.step()
-        optimizerE.step()
 
-        #####################################
-        enhanced_win = vis.image(enhanced.data[0].cpu()*0.5+0.5,win = enhanced_win)
         rec_win = vis.image(fake.data[0].cpu()*0.5+0.5,win = rec_win)
         real_win = vis.image(data[0][0]*0.5+0.5,win = real_win)
 
@@ -303,14 +270,10 @@ for epoch in range(opt.niter):
                     '%s/real_samples.png' % opt.outf,
                     normalize=True)
             fake = netG(fixed_noise)
-            enhanced=netE(fake)
             vutils.save_image(fake.data,
                     '%s/fake_samples_epoch_%03d.png' % (opt.outf, epoch),
                     normalize=True)
-            vutils.save_image(enhanced.data,
-                    '%s/enhanced_samples_epoch_%03d.png' % (opt.outf, epoch),
-                    normalize=True)
+
     # do checkpointing
-    torch.save(netE.state_dict(), '%s/netE_epoch_%d.pth' % (opt.outf, epoch))
     torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch))
     torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch))

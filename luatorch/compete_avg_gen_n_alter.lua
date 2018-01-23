@@ -145,7 +145,7 @@ local data_tm = torch.Timer()
 local noise = torch.Tensor(opt.batchSize, nz , 1, 1)
 local noise_cache = torch.Tensor(ngen,opt.batchSize , nz ,1 , 1)
 local score_D_cache=torch.Tensor(ngen,opt.batchSize )
-local feature_cache=torch.Tensor(ngen,opt.batchSize,512*4*4)
+local feature_cache=torch.Tensor(ngen,opt.batchSize,ndf*8*4*4)
 local sum_score_D=torch.Tensor(opt.batchSize)
 --local prev_message = torch.Tensor(opt.batchSize,nmsg,1,1):normal(0,1)
 --local prev_noise_cache = torch.Tensor(ngen,opt.batchSize , nz-nmsg ,1 , 1)
@@ -207,15 +207,7 @@ local fDx = function(x)
     data_tm:reset(); data_tm:resume()
     sum_score_D:zero()
     errD=0
-    local real = data:getBatch()
-    data_tm:stop()
-    input:copy(real)
-    label:fill(real_label)
-   
-    local output = netD:forward(input)
-    errD = errD+ criterion:forward(output, label)
-    local df_do = criterion:backward(output, label)
-    netD:backward(input, df_do)
+
     if opt.noise == 'uniform' then 
         noise:uniform(-1,1)
     elseif opt.noise=='normal' then
@@ -223,6 +215,16 @@ local fDx = function(x)
     end
 
     for i=1,ngen do
+        local real = data:getBatch()
+        data_tm:stop()
+        input:copy(real)
+        label:fill(real_label)
+   
+        local output = netD:forward(input)
+        errD = errD+ criterion:forward(output, label)
+        local df_do = criterion:backward(output, label)
+        netD:backward(input, df_do)
+        
         noise_cache[i]=noise
         local fake=G['netG'..i]:forward( noise)
         input:copy(fake)
@@ -234,7 +236,7 @@ local fDx = function(x)
         -- Competing Objective
         score_D_cache[i]=output
         sum_score_D=sum_score_D+score_D_cache[i]
-        feature_cache[i]=netD.modules[11].output:reshape(opt.batchSize,512*4*4)
+        feature_cache[i]=netD.modules[11].output:reshape(opt.batchSize,ndf*8*4*4)
     end
     return errD,gradParametersD 
 end

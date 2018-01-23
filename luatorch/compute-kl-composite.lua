@@ -8,8 +8,8 @@ require 'pl'
 require 'paths'
 
 local opt = lapp[[
-   -s,--save          (default "/mnt/raid/arnab/stacked-mnist")      subdirectory to save logs
-   -n,--network       (default "/mnt/raid/arnab/stacked-mnist/mnist.net")          reload pretrained network
+   -s,--save          (default "/home/torrvision/tinkering-projects/data/stacked-mnist")      subdirectory to save logs
+   -n,--network       (default "/home/torrvision/tinkering-projects/data/stacked-mnist/mnist.net")          reload pretrained network
    -m,--model         (default "convnet")   type of model tor train: convnet | mlp | linear
    -f,--full                                use the full dataset
    -p,--plot                                plot while training
@@ -21,7 +21,7 @@ local opt = lapp[[
    --coefL1           (default 0)           L1 penalty on the weights
    --coefL2           (default 0)           L2 penalty on the weights
    -t,--threads       (default 4)           number of threads
-   --directory        (default "/mnt/raid/arnab/inception") 
+   --directory        (default "/home/torrvision/data/inception") 
    --gen              (default 0)           Use all images by default
 ]]
 

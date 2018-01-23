@@ -13,13 +13,11 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 from torch.autograd import Variable
 import visdom
-from networks import *
+from common_net import *
+import math
+import copy
 vis = visdom.Visdom()
-vis.env = 'enhancer'
-
-
-
-
+vis.env = 'tails_madgan'
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', required=True, help='cifar10 | lsun | imagenet | folder | lfw | fake')
 parser.add_argument('--dataroot', required=True, help='path to dataset')
@@ -27,16 +25,18 @@ parser.add_argument('--workers', type=int, help='number of data loading workers'
 parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
 parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
 parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector')
+parser.add_argument('--nresidual', type=int, default=3, help='number of residual layers in discriminator')
 parser.add_argument('--ngf', type=int, default=64)
 parser.add_argument('--ndf', type=int, default=64)
-parser.add_argument('--niter', type=int, default=25, help='number of epochs to train for')
+parser.add_argument('--ngen', type=int, default=3)
+parser.add_argument('--niter', type=int, default=50, help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='./enhanced/', help='folder to output images and model checkpoints')
+parser.add_argument('--outf', default='./tails_madgan', help='folder to output images and model checkpoints')
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 
 opt = parser.parse_args()
@@ -96,28 +96,41 @@ nz = int(opt.nz)
 ngf = int(opt.ngf)
 ndf = int(opt.ndf)
 nc = 3
-
+ngen = opt.ngen
 
 # custom weights initialization called on netG and netD
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        m.weight.data.normal_(0.0, 0.02)
+        if 'weight' in m.__dict__.keys():
+            m.weight.data.normal_(0.0, 0.02)
     elif classname.find('BatchNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
-
 class _netG(nn.Module):
+    def __init__(self,ngpu):
+        super(_netG,self).__init__()
+        self.ngpu=ngpu
+        self.main=nn.Sequential(
+                # input is Z, going into a convolution
+                nn.ConvTranspose2d(     nz, ngf * 8, 4, 1, 0, bias=False),
+                nn.BatchNorm2d(ngf * 8),
+                nn.ReLU(True)
+                )
+    def forward(self,input):
+        if isinstance(input.data,torch.cuda.FloatTensor) and self.ngpu>1:
+            output=nn.parallel.data_parallel(self.main,input,range(self.ngpu))
+        else:
+            output = self.main(input)
+        return output
+
+class _netG_tail(nn.Module):
     def __init__(self, ngpu):
-        super(_netG, self).__init__()
+        super(_netG_tail, self).__init__()
         self.ngpu = ngpu
         self.main = nn.Sequential(
-            # input is Z, going into a convolution
-            nn.ConvTranspose2d(     nz, ngf * 8, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(ngf * 8),
-            nn.ReLU(True),
-            # state size. (ngf*8) x 4 x 4
+           # state size. (ngf*8) x 4 x 4
             nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
             nn.BatchNorm2d(ngf * 4),
             nn.ReLU(True),
@@ -142,12 +155,21 @@ class _netG(nn.Module):
             output = self.main(input)
         return output
 
+netG_tail = _netG_tail(ngpu)
+netG_tail.apply(weights_init)
+netG = []
+net = _netG(ngpu)
+net.apply(weights_init)
+state = net.state_dict()
+netG.append(net)
+for i in range(ngen-1):
+    state_clone = copy.deepcopy(state)
+    net=_netG(ngpu)
+    net.load_state_dict(state_clone)
+    netG.append(net)
 
-netG = _netG(ngpu)
-netG.apply(weights_init)
-if opt.netG != '':
-    netG.load_state_dict(torch.load(opt.netG))
-print(netG)
+#if opt.netG != '':
+#    netG.load_state_dict(torch.load(opt.netG))
 
 
 class _netD(nn.Module):
@@ -171,7 +193,7 @@ class _netD(nn.Module):
             nn.BatchNorm2d(ndf * 8),
             nn.LeakyReLU(0.2, inplace=True),
             # state size. (ndf*8) x 4 x 4
-            nn.Conv2d(ndf * 8, 3, 4, 1, 0, bias=False),
+            nn.Conv2d(ndf * 8, ngen+1, 4, 1, 0, bias=False),
             #nn.Sigmoid()
         )
 
@@ -181,7 +203,54 @@ class _netD(nn.Module):
         else:
             output = self.main(input)
 
-        return output.view(-1, 3)
+        return output.view(-1,ngen+1)  # output.view(-1, 1).squeeze(1) # output
+
+class _netD(nn.Module):
+    def __init__(self, ngpu):
+        super(_netD, self).__init__()
+        self.ngpu = ngpu
+        input_dim_a = 3
+        ch = ndf
+        n_enc_front_blk  = 3
+        n_enc_latter_blk = 1  #2
+        n_enc_res_blk    = 3
+        n_enc_shared_blk = 1
+        encA=[]
+        encA += [LeakyReLUConv2d(input_dim_a, ch, kernel_size=7, stride=2, padding=1)]
+        tch=ch
+        for i in range(0,n_enc_front_blk):
+            encA += [ReLUINSConv2d(tch, tch * 2, kernel_size=3, stride=2, padding=1)]
+            tch *= 2
+        for i in range(0,n_enc_latter_blk):
+            encA += [ReLUINSConv2d(tch, tch , kernel_size=3, stride=2, padding=1)]  #[ReLUINSConv2d(tch, tch , kernel_size=3, stride=2, padding=1)]
+        encA += [nn.Conv2d(tch, tch , 3, 2, 1,bias=False)]
+
+        for i in range(opt.nresidual):
+            encA += [INSResBlock(tch, tch)]
+        #encA += [INSResBlock(tch, tch)]
+        #encA += [INSResBlock(tch, tch)]
+        #encA+=[nn.Softmax()]
+        self.fch=tch
+        #for i in range(0, n_enc_res_blk):
+        #    encA += [INSResBlock(tch, tch)]
+
+        #for i in range(0, n_enc_shared_blk):
+        #    encA += [INSResBlock(tch, tch)]
+
+        self.linear=nn.Sequential(
+        nn.Conv2d(self.fch,ngen+1,1,1,0,bias=False),
+        #nn.Sigmoid()
+        )
+        #encA += [GaussianNoiseLayer()]
+        self.main=nn.Sequential(*encA)
+
+    def forward(self, input):
+        #if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:
+        #    output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
+        #else:
+        output = self.main(input)      #self.main(input)
+        output = self.linear(output)               #output.view(-1, self.fch))
+        return output.view(-1,ngen+1)  # output.view(-1, 1).squeeze(1) # output
 
 
 netD = _netD(ngpu)
@@ -190,22 +259,20 @@ if opt.netD != '':
     netD.load_state_dict(torch.load(opt.netD))
 print(netD)
 
-netE = UnetGenerator(3, 3, 6, ngf, norm_layer=nn.BatchNorm2d, use_dropout=False, gpu_ids=range(ngpu))
-init_weights(netE)
 criterion = nn.CrossEntropyLoss()  #nn.BCELoss()
 
-print(netE)
 input = torch.FloatTensor(opt.batchSize, 3, opt.imageSize, opt.imageSize)
 noise = torch.FloatTensor(opt.batchSize, nz, 1, 1)
 fixed_noise = torch.FloatTensor(opt.batchSize, nz, 1, 1).normal_(0, 1)
-label = torch.LongTensor(opt.batchSize)  #torch.FloatTensor(opt.batchSize)
-real_label = 1
-fake_label = 0
-enhanced_label=2
+label = torch.LongTensor(opt.batchSize)   #torch.FloatTensor(opt.batchSize)
+real_label = ngen
+fake_labels = np.arange(ngen)
+
 if opt.cuda:
     netD.cuda()
-    netG.cuda()
-    netE.cuda()
+    netG_tail.cuda()
+    for k in range(ngen):
+        netG[k].cuda()
     criterion.cuda()
     input, label = input.cuda(), label.cuda()
     noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
@@ -214,12 +281,15 @@ fixed_noise = Variable(fixed_noise)
 
 # setup optimizer
 optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-optimizerE = optim.Adam(netE.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+optimizerG_tail= optim.Adam(netG_tail.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+optimizerG=[]
+for i in range(ngen):
+    optimizerG.append(optim.Adam(netG[i].parameters(), lr=opt.lr, betas=(opt.beta1, 0.999)))
 
-rec_win=None
+fake_win=[]
+for i in range(ngen):
+    fake_win.append(None)
 real_win=None
-enhanced_win=None
 for epoch in range(opt.niter):
     for i, data in enumerate(dataloader, 0):
         ############################
@@ -241,58 +311,46 @@ for epoch in range(opt.niter):
         errD_real.backward()
         D_x = output.data.mean()
 
-        # train with fake
-        noise.resize_(batch_size, nz, 1, 1).normal_(0, 1)
-        noisev = Variable(noise)
-        fake = netG(noisev)
-        labelv = Variable(label.fill_(fake_label))
-        output = netD(fake.detach())
-        errD_fake = criterion(output, labelv)
-        errD_fake.backward()
-        D_G_z1 = output.data.mean()
-
-        # train with enhanced
-
-        labelv = Variable( label.fill_( enhanced_label )  )
-        enhanced= netE(fake.detach())            #netE(fake)
-        output = netD(enhanced.detach())
-        errD_enhanced= criterion(output,labelv)
-        errD_enhanced.backward()
-        errD = errD_real + errD_fake + errD_enhanced
+        # train with fakes
+        fakes=[]
+        D_G_z1=0
+        errD = errD_real
+        for k in range(ngen):
+            noise.resize_(batch_size, nz, 1, 1).normal_(0, 1)
+            noisev = Variable(noise)
+            head_output=netG[k](noisev)
+            fake=netG_tail(head_output)
+            labelv = Variable(label.fill_(fake_labels[k].item()))
+            output = netD(fake.detach())
+            errD_fake = criterion(output, labelv)
+            errD_fake.backward()
+            D_G_z1 += output.data.mean()
+            fakes.append(fake)
+            errD=errD+errD_fake
         optimizerD.step()
-
-        D_E_G_z1=output.data.mean()
-
-
+        D_G_z1/=ngen
         ############################
         # (2) Update G network: maximize log(D(G(z)))
         ###########################
-        netG.zero_grad()
-        labelv = Variable(label.fill_(real_label))  # fake labels are real for generator cost
-        output = netD(fake)
-        errG = criterion(output, labelv)
-        errG.backward(retain_variables=True)
-        D_G_z2 = output.data.mean()
-
-
-
-        ###############################
-        # (3) Update E network: maximize log(E(D(G(z))))
-        ###############################
-        netE.zero_grad()
-        labelv = Variable(label.fill_(real_label))  # fake labels are real for generator cost
-        output = netD(enhanced)
-        errE = criterion(output,labelv)
-        errE.backward()
-
-        D_E_G_z2 = output.data.mean()
-
-        optimizerG.step()
-        optimizerE.step()
-
-        #####################################
-        enhanced_win = vis.image(enhanced.data[0].cpu()*0.5+0.5,win = enhanced_win)
-        rec_win = vis.image(fake.data[0].cpu()*0.5+0.5,win = rec_win)
+        D_G_z2=0
+        errG=0
+        errGs=[]
+        for k in range(ngen):
+            errGs.append(None)
+        for k in range(ngen):
+            netG[k].zero_grad()
+            netD.zero_grad()
+            labelv = Variable(label.fill_(real_label))  # fake labels are real for generator cost
+            output = netD(fakes[k])
+            errG += criterion(output, labelv)
+            errGs[k]=criterion(output,labelv)
+            errGs[k].backward( retain_graph=True )
+            D_G_z2 += output.data.mean()
+            optimizerG[k].step()
+        D_G_z2/=ngen
+        optimizerG_tail.step()
+        for k in range(ngen):
+            fake_win[k]= vis.image(fakes[k].data[0].cpu()*0.5+0.5,win = fake_win[k])
         real_win = vis.image(data[0][0]*0.5+0.5,win = real_win)
 
         print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
@@ -302,15 +360,13 @@ for epoch in range(opt.niter):
             vutils.save_image(real_cpu,
                     '%s/real_samples.png' % opt.outf,
                     normalize=True)
-            fake = netG(fixed_noise)
-            enhanced=netE(fake)
-            vutils.save_image(fake.data,
-                    '%s/fake_samples_epoch_%03d.png' % (opt.outf, epoch),
-                    normalize=True)
-            vutils.save_image(enhanced.data,
-                    '%s/enhanced_samples_epoch_%03d.png' % (opt.outf, epoch),
-                    normalize=True)
+            for k in range(ngen):
+                head_output=netG[k](fixed_noise)
+                fake = netG_tail( head_output  )
+                vutils.save_image(fake.data,
+                        '%s/fake_samples_epoch_%03d_gen_%03d.png' % (opt.outf, epoch,k),
+                        normalize=True)
+
     # do checkpointing
-    torch.save(netE.state_dict(), '%s/netE_epoch_%d.pth' % (opt.outf, epoch))
-    torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch))
-    torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch))
+    #torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch))
+    #torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch))
