@@ -6,6 +6,8 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pylab as pl
+sns.set(color_codes=True)
 
 class MoG1DDataset(Dataset):
     "MoG1D Dataset"
@@ -22,8 +24,16 @@ class MoG1DDataset(Dataset):
 
     def plot_samples(self,filename='samples.png'):
         fig,axs= plt.subplots()
-        sns.distplot(self.samples,ax=axs, bins=range(int(min(self.mode_info['modes'])-5),int(max(self.mode_info['modes'])+5),1) , kde=False)
+        sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-5),int(max(self.mode_info['modes'])+5),0.1) , kde=False)
         plt.savefig(filename)
+        plt.clf()
+
+    def plot_generated_samples(self,generated_samples,filename='generated_samples.png'):
+        fig,axs= plt.subplots()
+        sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-5),int(max(self.mode_info['modes'])+5),0.1) , kde=False)
+        sns.distplot(generated_samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-5),int(max(self.mode_info['modes'])+5),0.1) , kde=False)
+        plt.savefig(filename)
+        plt.clf()
 
     def read_spec_file(self,spec_file):
         lines=[]
@@ -41,7 +51,7 @@ class MoG1DDataset(Dataset):
             line=line.rstrip()
             mode=float(line.split(' ')[0])
             std=float(line.split(' ')[1])
-            density=float(line.split(' ')[1])
+            density=float(line.split(' ')[2])
             total_density=density+total_density
             modes.append(mode)
             stds.append(std)
@@ -66,4 +76,4 @@ class MoG1DDataset(Dataset):
         return self.num_samples
 
     def __getitem__(self,idx):
-        return samples[idx]
+        return self.samples[idx]

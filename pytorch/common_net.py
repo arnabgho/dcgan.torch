@@ -62,6 +62,52 @@ class INSResBlock(nn.Module):
     out += residual
     return out
 
+class BATCHResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1):
+    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+    super(BATCHResBlock, self).__init__()
+    model = []
+    model += [self.conv3x3(inplanes, planes, stride)]
+    model += [nn.BatchNorm2d(planes)]
+    model += [nn.ReLU(inplace=True)]
+    model += [self.conv3x3(planes, planes)]
+    model += [nn.BatchNorm2d(planes)]
+    if dropout > 0:
+      model += [nn.Dropout(p=dropout)]
+    self.model = nn.Sequential(*model)
+    self.model.apply(gaussian_weights_init)
+
+  def forward(self, x):
+    residual = x
+    out = self.model(x)
+    out += residual
+    return out
+
+class ResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1):
+    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+    super(ResBlock, self).__init__()
+    model = []
+    model += [self.conv3x3(inplanes, planes, stride)]
+    #model += [nn.InstanceNorm2d(planes)]
+    model += [nn.ReLU(inplace=True)]
+    model += [self.conv3x3(planes, planes)]
+    #model += [nn.InstanceNorm2d(planes)]
+    if dropout > 0:
+      model += [nn.Dropout(p=dropout)]
+    self.model = nn.Sequential(*model)
+    self.model.apply(gaussian_weights_init)
+
+  def forward(self, x):
+    residual = x
+    out = self.model(x)
+    out += residual
+    return out
+
 class LeakyReLUConv2d(nn.Module):
   def __init__(self, n_in, n_out, kernel_size, stride, padding=0):
     super(LeakyReLUConv2d, self).__init__()

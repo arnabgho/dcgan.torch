@@ -64,7 +64,7 @@ if opt.dataset in ['imagenet', 'folder', 'lfw']:
                                    transforms.ToTensor(),
                                    #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                ]))
-    dataset_test=dset.ImageFolder(root=opt.dataroot+'_val',
+    dataset_test=dset.ImageFolder(root=opt.dataroot,
                                transform=transforms.Compose([
                                    transforms.Scale(opt.imageSize),
                                    transforms.CenterCrop(opt.imageSize),
