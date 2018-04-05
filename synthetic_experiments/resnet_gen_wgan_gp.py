@@ -12,13 +12,14 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
 from torch.autograd import Variable
+import torch.autograd as autograd
 import visdom
 from common_net import *
 import math
 import sys
 from data_generator import *
 vis = visdom.Visdom()
-vis.env = 'resnet_gen'
+vis.env = 'wgan_gp_resnet'
 parser = argparse.ArgumentParser()
 parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
 parser.add_argument('--batchSize', type=int, default=4096, help='input batch size')
@@ -32,12 +33,13 @@ parser.add_argument('--niter', type=int, default=100, help='number of epochs to 
 parser.add_argument('--num_samples', type=int, default=1000000, help='number of samples in the dataset')
 parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
 parser.add_argument('--dropout', type=float, default=0.0, help='dropout rate, default=0')
+parser.add_argument('--lambda_gp', type=float, default=0.1, help='lambda for WGAN-GP, default=0.1')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='./resnet_gen/', help='folder to output images and model checkpoints')
+parser.add_argument('--outf', default='./wgan_resnet_gen/', help='folder to output images and model checkpoints')
 parser.add_argument('--manualSeed', type=int,default=7, help='manual seed')
 
 opt = parser.parse_args()
@@ -117,7 +119,7 @@ class _netD(nn.Module):
         # Final layer to map to sigmoid output
 
         main_block+=[nn.Linear(opt.ngf,1)]
-	main_block+=[nn.Sigmoid()]
+	#main_block+=[nn.Sigmoid()]
 
         self.main=nn.Sequential(*main_block)
 
@@ -142,21 +144,42 @@ with open(opt.outf+'/architecture.txt' , 'w'  ) as f:
 
 criterion=nn.BCELoss()
 
+def calc_gradient_penalty(netD, real_data, fake_data):
+    alpha = torch.rand(opt.batchSize, 1)
+    alpha = alpha.expand(real_data.size())
+    alpha = alpha.cuda() if opt.cuda else alpha
+
+    interpolates = alpha * real_data + ((1 - alpha) * fake_data)
+
+    if opt.cuda:
+        interpolates = interpolates.cuda()
+    interpolates = autograd.Variable(interpolates, requires_grad=True)
+
+    disc_interpolates = netD(interpolates)
+
+    gradients = autograd.grad(outputs=disc_interpolates, inputs=interpolates,
+                              grad_outputs=torch.ones(disc_interpolates.size()).cuda() if opt.cuda else torch.ones(
+                                  disc_interpolates.size()),
+                              create_graph=True, retain_graph=True, only_inputs=True)[0]
+
+    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * opt.lambda_gp
+    return gradient_penalty
+
 input=torch.FloatTensor(opt.batchSize,opt.out_dim)
 noise = torch.FloatTensor(opt.batchSize, opt.nz)
 fixed_noise = torch.FloatTensor(opt.batchSize, opt.nz).normal_(0, 1)
-label = torch.FloatTensor(opt.batchSize)
 generated_samples=np.zeros(opt.num_samples)
 real_label = 1
 fake_label = 0
-
+one = torch.FloatTensor([1])
+mone = one * -1
 if opt.cuda:
     netD.cuda()
     netG.cuda()
     criterion.cuda()
-    input, label = input.cuda(), label.cuda()
+    input = input.cuda()
     noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
-
+    one, mone = one.cuda() , mone.cuda()
 fixed_noise = Variable(fixed_noise)
 
 #setup optimizer
@@ -178,41 +201,42 @@ for epoch in range(opt.niter):
             real_cpu = real_cpu.cuda()
         real_cpu=real_cpu.resize_as_(input)
         input.resize_as_(real_cpu).copy_(real_cpu)
-        label.resize_(batch_size).fill_(real_label)
-        inputv = Variable(input)
-        labelv = Variable(label)
+        realv = Variable(input)
 
-        output = netD(inputv)
-        errD_real = criterion(output, labelv)
-        errD_real.backward()
-        D_x = output.data.mean()
+        D_real = netD(realv)
+	D_real = D_real.mean()
+	D_real.backward(mone)
 
         # train with fake
         noise.resize_(batch_size, opt.nz).normal_(0, 1)
         noisev = Variable(noise)
         fake = netG(noisev)
-        labelv = Variable(label.fill_(fake_label))
-        output = netD(fake.detach())
-        errD_fake = criterion(output, labelv)
-        errD_fake.backward()
-        D_G_z1 = output.data.mean()
-        errD = errD_real + errD_fake
+        D_fake=netD(fake.detach())
+	D_fake=D_fake.mean()
+	D_fake.backward(one)
+
+        # gradient penalty
+        gradient_penalty = calc_gradient_penalty(netD, realv.data, fake.data)
+        gradient_penalty.backward()
+
+        D_cost = D_fake - D_real + gradient_penalty
+        Wasserstein_D = D_real - D_fake
+
         optimizerD.step()
 
         ############################
         # (2) Update G network: maximize log(D(G(z)))
         ###########################
         netG.zero_grad()
-        labelv = Variable(label.fill_(real_label))  # fake labels are real for generator cost
-        output = netD(fake)
-        errG = criterion(output, labelv)
-        errG.backward()
-        D_G_z2 = output.data.mean()
+        G = netD(fake)
+        G = G.mean()
+        G.backward(mone)
+        G_cost = -G
         optimizerG.step()
 
-	print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
+	print('[%d/%d][%d/%d] D_cost: %.4f G_cost: %.4f Wasserstein_D: %.4f '
               % (epoch, opt.niter, i, len(dataloader),
-                 errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
+                 D_cost.cpu().data.numpy(), G_cost.cpu().data.numpy(), Wasserstein_D.cpu().data.numpy()))
 
     num_sampled=0
     while(num_sampled<opt.num_samples):
