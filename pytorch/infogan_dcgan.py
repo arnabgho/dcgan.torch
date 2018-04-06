@@ -1,4 +1,5 @@
-
+from __future__ import print_function
+import argparse
 import os
 import random
 import torch
@@ -12,6 +13,7 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 from torch.autograd import Variable
 import visdom
+import numpy as np
 vis = visdom.Visdom()
 vis.env = 'infogan_dcgan'
 
@@ -24,7 +26,7 @@ parser.add_argument('--imageSize', type=int, default=64, help='the height / widt
 parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector')
 parser.add_argument('--ndiscrete', type=int, default=10, help='size of the latent z vector')
 parser.add_argument('--ndiscrete_chosen', type=int, default=2, help='size of the latent z vector')
-parser.add_argument('--ncontinuous', type=int, default=10, help='size of the latent z vector')
+parser.add_argument('--ncontinuous', type=int, default=2, help='size of the latent z vector')
 parser.add_argument('--ngf', type=int, default=64)
 parser.add_argument('--ndf', type=int, default=64)
 parser.add_argument('--niter', type=int, default=25, help='number of epochs to train for')
@@ -36,7 +38,7 @@ parser.add_argument('--netG', default='', help="path to netG (to continue traini
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
 parser.add_argument('--netQ', default='', help="path to netQ (to continue training)")
 parser.add_argument('--netFE', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='./dcgan', help='folder to output images and model checkpoints')
+parser.add_argument('--outf', default='./infogan-dcgan', help='folder to output images and model checkpoints')
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 
 opt = parser.parse_args()
@@ -113,7 +115,7 @@ def weights_init(m):
         m.bias.data.fill_(0)
 
 
-def _noise_sample(self,dis_c,con_c,noise):
+def _noise_sample(dis_c,con_c,noise_c):
     discrete_np=np.zeros((opt.batchSize,opt.ndiscrete))
     for i in range(opt.batchSize):
         activated=np.random.choice(opt.ndiscrete,opt.ndiscrete_chosen,replace=False)
@@ -121,8 +123,8 @@ def _noise_sample(self,dis_c,con_c,noise):
 
     dis_c.data.copy_(torch.Tensor(discrete_np))
     con_c.data.uniform_(-1.0,1.0)
-    noise.data.uniform_(-1.0,1.0)
-    z=torch.cat([noise,dis_c,con_c],1).view(-1,opt.nz+opt.ndiscrete + opt.ncontinuous,1,1)
+    noise_c.data.uniform_(-1.0,1.0)
+    z=torch.cat([noise_c,dis_c,con_c],1).view(-1,opt.nz+opt.ndiscrete + opt.ncontinuous,1,1)
 
     return z , discrete_np
 
@@ -225,10 +227,10 @@ class _netQ(nn.Module):
         self.mu_branch = nn.Sequential( nn.Conv2d(ndf * 8, opt.ncontinuous, 4, 1, 0, bias=False) )
         self.std_branch = nn.Sequential( nn.Conv2d(ndf * 8, opt.ncontinuous, 4, 1, 0, bias=False) )
     def forward(self,input):
-            output_continuous = self.continous_branch(input)
-            output_continuous_mu = self.mu_branch( output_continuous )
-            output_continuous_std = self.std_branch( output_continuous  )
-            output_discrete = self.discrete_branch(input)
+        output_continuous = self.continuous_branch(input)
+        output_continuous_mu = self.mu_branch( output_continuous )
+        output_continuous_std = self.std_branch( output_continuous  )
+        output_discrete = self.discrete_branch(input)
 
         return [output_discrete.view(-1,opt.ndiscrete),output_continuous_mu.view(-1,opt.ncontinuous), output_continuous_std.view(-1,opt.ncontinuous) ]  #output.view(-1, 1).squeeze(1)
 
@@ -280,23 +282,32 @@ fake_label = 0
 if opt.cuda:
     netD.cuda()
     netG.cuda()
+    netFE.cuda()
+    netQ.cuda()
     criterion.cuda()
-    criterion_Q.cuda()
+    #criterion_Q.cuda()
     input, label = input.cuda(), label.cuda()
     noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
 
 fixed_noise = Variable(fixed_noise)
 
 # setup optimizer
-optimizerD = optim.Adam( [ { 'params':self.netFE.parameters()  } , { 'params' : netD.parameters() } ] , lr=opt.lr, betas=(opt.beta1, 0.999))
-optimizerG = optim.Adam( [ { 'params':self.netG.parameters()  } , { 'params' : netQ.parameters() } ], lr=opt.lr, betas=(opt.beta1, 0.999))
+optimizerD = optim.Adam( [ { 'params':netFE.parameters()  } , { 'params' : netD.parameters() } ] , lr=opt.lr, betas=(opt.beta1, 0.999))
+optimizerG = optim.Adam( [ { 'params':netG.parameters()  } , { 'params' : netQ.parameters() } ], lr=opt.lr, betas=(opt.beta1, 0.999))
 
 dis_c= torch.FloatTensor(opt.batchSize, opt.ndiscrete).cuda()
 con_c = torch.FloatTensor(opt.batchSize, opt.ncontinuous).cuda()
 noise_c = torch.FloatTensor(opt.batchSize, opt.nz).cuda()
 dis_c = Variable(dis_c)
 con_c = Variable(con_c)
-noise_c = Variable(noise)
+noise_c = Variable(noise_c)
+
+fix_dis_c= torch.FloatTensor(100, opt.ndiscrete).cuda()
+fix_con_c = torch.FloatTensor(100, opt.ncontinuous).cuda()
+fix_noise_c = torch.FloatTensor(100, opt.nz).cuda()
+fix_dis_c = Variable(fix_dis_c)
+fix_con_c = Variable(fix_con_c)
+fix_noise_c = Variable(fix_noise_c)
 
 # fixed random variables
 c = np.linspace(-1, 1, 10).reshape(1, -1)
@@ -319,7 +330,7 @@ for i in range(10):
 
 
 
-fix_noise = torch.Tensor(100, 62).uniform_(-1, 1)
+fix_noise_c_fix = torch.Tensor(100, opt.nz).uniform_(-1, 1)
 
 
 rec_win=None
@@ -346,9 +357,9 @@ for epoch in range(opt.niter):
         D_x = output.data.mean()
 
         # train with fake
-        noise, idx = self._noise_sample(dis_c,con_c,noise_c)
-        noise.resize_(batch_size, opt.nz + opt.ndiscrete + opt.ncontinuous , 1, 1)
-        noisev = Variable(noise)
+        noise, idx = _noise_sample(dis_c,con_c,noise_c)
+        noisev=noise.resize(batch_size, opt.nz + opt.ndiscrete + opt.ncontinuous , 1, 1)
+        #noisev = Variable(noise)
         fake = netG(noisev)
         labelv = Variable(label.fill_(fake_label))
         fe_output=netFE( fake.detach())
@@ -360,15 +371,16 @@ for epoch in range(opt.niter):
         optimizerD.step()
 
         ############################
-        # (2) Update G network: maximize log(D(G(z)))
+        # (2) Update G network: maximize log(D(G(z))) & Q Network
         ###########################
         optimizerG.zero_grad() #netG.zero_grad()
         labelv = Variable(label.fill_(real_label))  # fake labels are real for generator cost
-        output = netD(netFE(fake))
+        fe_output= netFE(fake)
+        output = netD(fe_output)
         errG_GAN = criterion(output, labelv)
 
 
-        q_logits,q_mu,q_var = self.netQ(fe_output)
+        q_logits,q_mu,q_var = netQ(fe_output)
         errG_discrete = criterion_discrete(q_logits,dis_c)
         errG_continuous = criterion_continuous(con_c , q_mu , q_var)
 
@@ -384,25 +396,17 @@ for epoch in range(opt.niter):
               % (epoch, opt.niter, i, len(dataloader),
                  errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
         if i % 100 == 0:
-            vutils.save_image(real_cpu,
-                    '%s/real_samples.png' % opt.outf,
-                    normalize=True)
-            fake = netG(fixed_noise)
-            vutils.save_image(fake.data,
-                    '%s/fake_samples_epoch_%03d.png' % (opt.outf, epoch),
-                    normalize=True)
-            noise.data.copy_(fix_noise)
-            dis_c.data.copy_(torch.Tensor(one_hot))
+            fix_noise_c.data.copy_(fix_noise_c_fix)
+            fix_dis_c.data.copy_(torch.Tensor(one_hot))
+            fix_con_c.data.copy_(torch.from_numpy(c1))
+            z = torch.cat([fix_noise_c, fix_dis_c, fix_con_c], 1).view(-1, opt.nz + opt.ndiscrete + opt.ncontinuous, 1, 1)
+            x_save = netG(z)
+            vutils.save_image(x_save.data, '%s/c1.png' % opt.outf, nrow=10)
 
-            con_c.data.copy_(torch.from_numpy(c1))
-            z = torch.cat([noise, dis_c, con_c], 1).view(-1, opt.nz + opt.ndiscrete + opt.ncontinuous, 1, 1)
-            x_save = self.G(z)
-            save_image(x_save.data, '%s/c1.png' % opt.outf, nrow=10)
-
-            con_c.data.copy_(torch.from_numpy(c2))
-            z = torch.cat([noise, dis_c, con_c], 1).view(-1, opt.nz + opt.ndiscrete + opt.ncontinuous , 1, 1)
-            x_save = self.G(z)
-            save_image(x_save.data, '%s/c2.png' % opt.outf , nrow=10)
+            fix_con_c.data.copy_(torch.from_numpy(c2))
+            z = torch.cat([fix_noise_c, fix_dis_c, fix_con_c], 1).view(-1, opt.nz + opt.ndiscrete + opt.ncontinuous , 1, 1)
+            x_save = netG(z)
+            vutils.save_image(x_save.data, '%s/c2.png' % opt.outf , nrow=10)
     # do checkpointing
     #torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch))
     #torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch))
