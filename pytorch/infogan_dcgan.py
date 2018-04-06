@@ -15,9 +15,6 @@ import visdom
 vis = visdom.Visdom()
 vis.env = 'infogan_dcgan'
 
-
-
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', required=True, help='cifar10 | lsun | imagenet | folder | lfw | fake')
 parser.add_argument('--dataroot', required=True, help='path to dataset')
@@ -215,7 +212,6 @@ class _netQ(nn.Module):
             nn.BatchNorm2d(ndf * 8),
             nn.LeakyReLU(0.2, inplace=True),
             # state size. (ndf*8) x 4 x 4
-            nn.Conv2d(ndf * 8, opt.ncontinuous, 4, 1, 0, bias=False)
             )
         self.discrete_branch=nn.Sequential(
             # state size. (ndf*4) x 8 x 8
@@ -226,15 +222,15 @@ class _netQ(nn.Module):
             nn.Conv2d(ndf * 8, opt.ndiscrete, 4, 1, 0, bias=False)
             )
 
+        self.mu_branch = nn.Sequential( nn.Conv2d(ndf * 8, opt.ncontinuous, 4, 1, 0, bias=False) )
+        self.std_branch = nn.Sequential( nn.Conv2d(ndf * 8, opt.ncontinuous, 4, 1, 0, bias=False) )
     def forward(self,input):
-        if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:
-            output_continuous = nn.parallel.data_parallel(self.continuous_branch, input, range(self.ngpu))
-            output_discrete = nn.parallel.data_parallel(self.discrete_branch, input, range(self.ngpu))
-        else:
             output_continuous = self.continous_branch(input)
+            output_continuous_mu = self.mu_branch( output_continuous )
+            output_continuous_std = self.std_branch( output_continuous  )
             output_discrete = self.discrete_branch(input)
 
-        return [output_discrete.view(-1,opt.ndiscrete),output_continuous.view(-1,opt.ncontinuous)]  #output.view(-1, 1).squeeze(1)
+        return [output_discrete.view(-1,opt.ndiscrete),output_continuous_mu.view(-1,opt.ncontinuous), output_continuous_std.view(-1,opt.ncontinuous) ]  #output.view(-1, 1).squeeze(1)
 
 netQ = _netQ(ngpu)
 netQ.apply(weights_init)
@@ -309,9 +305,20 @@ c = np.repeat(c, 10, 0).reshape(-1, 1)
 c1 = np.hstack([c, np.zeros_like(c)])
 c2 = np.hstack([np.zeros_like(c), c])
 
-idx = np.arange(10).repeat(10)
+####################
+#idx = np.arange(10).repeat(10)
+#one_hot = np.zeros((100, 10))
+#one_hot[range(100), idx] = 1
+###################
+
 one_hot = np.zeros((100, 10))
-one_hot[range(100), idx] = 1
+for i in range(10):
+    idx=np.random.choice(opt.ndiscrete,opt.ndiscrete_chosen,replace=False)
+    for j in range(10):
+        one_hot[i*10+j][idx] = 1
+
+
+
 fix_noise = torch.Tensor(100, 62).uniform_(-1, 1)
 
 
@@ -384,7 +391,18 @@ for epoch in range(opt.niter):
             vutils.save_image(fake.data,
                     '%s/fake_samples_epoch_%03d.png' % (opt.outf, epoch),
                     normalize=True)
+            noise.data.copy_(fix_noise)
+            dis_c.data.copy_(torch.Tensor(one_hot))
 
+            con_c.data.copy_(torch.from_numpy(c1))
+            z = torch.cat([noise, dis_c, con_c], 1).view(-1, opt.nz + opt.ndiscrete + opt.ncontinuous, 1, 1)
+            x_save = self.G(z)
+            save_image(x_save.data, '%s/c1.png' % opt.outf, nrow=10)
+
+            con_c.data.copy_(torch.from_numpy(c2))
+            z = torch.cat([noise, dis_c, con_c], 1).view(-1, opt.nz + opt.ndiscrete + opt.ncontinuous , 1, 1)
+            x_save = self.G(z)
+            save_image(x_save.data, '%s/c2.png' % opt.outf , nrow=10)
     # do checkpointing
     #torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch))
     #torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch))

@@ -12,6 +12,7 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
 from torch.autograd import Variable
+import torch.autograd as autograd
 import visdom
 from common_net import *
 import math
@@ -445,7 +446,7 @@ for epoch in range(opt.niter):
         ###########################
         # train with real
         netD.zero_grad()
-        real_cpu = data.float()
+        real_cpu,_ = data
         batch_size = real_cpu.size(0)
         if batch_size!=opt.batchSize:
             continue
@@ -460,7 +461,7 @@ for epoch in range(opt.niter):
 	D_real.backward(mone)
 
         # train with fake
-        noise.resize_(batch_size, opt.nz).normal_(0, 1)
+        noise.resize_(batch_size, opt.nz,1,1).normal_(0, 1)
         noisev = Variable(noise)
         fake = netG(noisev)
         D_fake=netD(fake.detach())
