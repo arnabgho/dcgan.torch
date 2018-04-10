@@ -77,7 +77,7 @@ class _netG(nn.Module):
         # Sets of residual blocks start
 
         for i in range(opt.ngres):
-            main_block+=[BATCHResBlock(opt.ngf,opt.dropout)]
+            main_block+= [ResBlock(opt.ngf,opt.dropout)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
         # Final layer to map to 1D
 
@@ -112,7 +112,7 @@ class _netD(nn.Module):
         # Sets of residual blocks start
 
         for i in range(opt.ndres):
-            main_block+=[BATCHResBlock(opt.ngf,opt.dropout)]
+            main_block+= [ResBlock(opt.ngf,opt.dropout)] # [BATCHResBlock(opt.ngf,opt.dropout)]
 
         # Final layer to map to sigmoid output
 
@@ -164,6 +164,19 @@ optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 
 for epoch in range(opt.niter):
+    num_sampled=0
+    while(num_sampled<opt.num_samples):
+        noise.resize_(opt.batchSize, opt.nz).normal_(0, 1)
+        noisev = Variable(noise)
+        fake = netG(noisev)
+        fake_cpu_np=fake.data.cpu().numpy().reshape(opt.batchSize)
+        if num_sampled+opt.batchSize<opt.num_samples:
+            generated_samples[num_sampled:num_sampled+opt.batchSize ] = fake_cpu_np
+        else:
+            generated_samples[num_sampled:opt.num_samples] = fake_cpu_np[ 0:opt.num_samples-num_sampled ]
+        num_sampled+=opt.batchSize
+    #dataset.plot_generated_samples(generated_samples,filename=opt.outf+'generated_samples_'+str(epoch)+'.png')
+    dataset.plot_generated_samples_discriminator(generated_samples,netD,opt.batchSize,filename=opt.outf+'generated_samples_'+str(epoch)+'.png')
     for i,data in enumerate(dataloader,0):
         ############################
         # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
@@ -213,17 +226,4 @@ for epoch in range(opt.niter):
 	print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
               % (epoch, opt.niter, i, len(dataloader),
                  errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
-
-    num_sampled=0
-    while(num_sampled<opt.num_samples):
-        noise.resize_(opt.batchSize, opt.nz).normal_(0, 1)
-        noisev = Variable(noise)
-        fake = netG(noisev)
-        fake_cpu_np=fake.data.cpu().numpy().reshape(opt.batchSize)
-        if num_sampled+opt.batchSize<opt.num_samples:
-            generated_samples[num_sampled:num_sampled+opt.batchSize ] = fake_cpu_np
-        else:
-            generated_samples[num_sampled:opt.num_samples] = fake_cpu_np[ 0:opt.num_samples-num_sampled ]
-        num_sampled+=opt.batchSize
-    dataset.plot_generated_samples(generated_samples,filename=opt.outf+'generated_samples_'+str(epoch)+'.png')
 

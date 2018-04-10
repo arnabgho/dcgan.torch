@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pylab as pl
+from torch.autograd import Variable
 sns.set(color_codes=True)
 
 class MoG1DDataset(Dataset):
@@ -32,6 +33,58 @@ class MoG1DDataset(Dataset):
         fig,axs= plt.subplots()
         sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False)
         sns.distplot(generated_samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False)
+        plt.savefig(filename)
+        plt.clf()
+
+    def estimate_prob_discriminator( self ,netD ,batch_size, bin_range  ):
+        num_bins=bin_range.shape[0]
+        output_D=np.zeros( num_bins)
+        input=torch.FloatTensor(batch_size,1)
+        input= input.cuda()
+        bin_range_rounded=np.zeros( int( num_bins/batch_size + 1   )*batch_size  )
+        bin_range_rounded[0:num_bins]=bin_range
+        total_gen=0
+        while(total_gen<=num_bins):
+            input.copy_(torch.Tensor(bin_range_rounded[total_gen:total_gen+batch_size]))
+            inputv=Variable(input)
+            output=netD(inputv)
+            output_np=output.data.cpu().numpy().reshape(batch_size)
+
+            if total_gen+batch_size<num_bins:
+                output_D[ total_gen:total_gen+batch_size ]=output_np
+            else:
+                output_D[ total_gen:num_bins ] =output_np[0:num_bins-total_gen]
+            total_gen+=batch_size
+
+        return output_D
+
+    def generate_samples_D(self,original_samples,bin_range,output_D):
+        hist, bin_edges = np.histogram(original_samples, bins = bin_range )
+        maxim = max(hist)
+        total_gen_bin = output_D
+        total_generations = 0
+        for i in range(output_D.shape[0]):
+            total_gen_bin[i] = int(output_D[i] * maxim)
+            total_generations+= int(total_gen_bin[i])
+
+        final_generations=np.zeros(total_generations)
+
+        index=0
+        for i in range(total_gen_bin.shape[0]):
+            for j in range(int(total_gen_bin[i])):
+                final_generations[ index ] = bin_range[i]
+                index+=1
+
+        return final_generations
+
+    def plot_generated_samples_discriminator(self,generated_samples,netD,batch_size,filename='generated_samples.png'):
+        fig,axs= plt.subplots()
+        bin_range=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1)
+        output_D=self.estimate_prob_discriminator(netD,batch_size,bin_range)
+        samples_D=self.generate_samples_D(self.samples,bin_range,output_D)
+        sns.distplot(self.samples,ax=axs, bins=bin_range , kde=False)
+        sns.distplot(generated_samples,ax=axs, bins=bin_range , kde=False)
+        sns.distplot(samples_D,ax=axs,bins=bin_range, kde=False)
         plt.savefig(filename)
         plt.clf()
 
