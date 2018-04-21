@@ -37,7 +37,7 @@ parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='./resnet_gen/', help='folder to output images and model checkpoints')
+parser.add_argument('--outf', default='./simple_gan_deep/', help='folder to output images and model checkpoints')
 parser.add_argument('--manualSeed', type=int,default=7, help='manual seed')
 
 opt = parser.parse_args()
@@ -77,7 +77,7 @@ class _netG(nn.Module):
         # Sets of residual blocks start
 
         for i in range(opt.ngres):
-            main_block+= [MAX_SELECTResBlock(opt.ngf,opt.dropout)] #[BATCHResBlock(opt.ngf,opt.dropout)]
+            main_block+= [LinearRELUBlock(opt.ngf,opt.dropout)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
         # Final layer to map to 1D
 
@@ -112,7 +112,7 @@ class _netD(nn.Module):
         # Sets of residual blocks start
 
         for i in range(opt.ndres):
-            main_block+= [ResBlock(opt.ngf,opt.dropout)] # [BATCHResBlock(opt.ngf,opt.dropout)]
+            main_block+= [LinearRELUBlock(opt.ngf,opt.dropout)] # [BATCHResBlock(opt.ngf,opt.dropout)]
 
         # Final layer to map to sigmoid output
 
@@ -227,6 +227,4 @@ for epoch in range(opt.niter):
 	print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
               % (epoch, opt.niter, i, len(dataloader),
                  errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
-    # do checkpointing
-        torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch))
-        torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch))
+

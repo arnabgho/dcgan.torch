@@ -28,14 +28,14 @@ class MoG1DDataset(Dataset):
         sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False)
         plt.savefig(filename)
         plt.clf()
-
+        plt.close()
     def plot_generated_samples(self,generated_samples,filename='generated_samples.png'):
         fig,axs= plt.subplots()
         sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False)
         sns.distplot(generated_samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False)
         plt.savefig(filename)
         plt.clf()
-
+        plt.close()
     def estimate_prob_discriminator( self ,netD ,batch_size, bin_range  ):
         num_bins=bin_range.shape[0]
         output_D=np.zeros( num_bins)

@@ -59,3 +59,55 @@ class ResBlock(nn.Module):
         out=self.model(x)
         out+=residual
         return out
+
+class MAX_SELECTResBlock(nn.Module):
+    def __init__(self,num_neurons,dropout=0.0):
+        super(MAX_SELECTResBlock, self).__init__()
+
+        model = []
+        model += [nn.Linear(num_neurons,num_neurons)]
+        model += [nn.ReLU(inplace=True)]
+        model += [nn.Linear(num_neurons,num_neurons)]
+        if dropout > 0:
+            model += [nn.Dropout(p=dropout)]
+        self.model = nn.Sequential(*model)
+
+    def forward(self,x):
+        residual=x
+        out=self.model(x)
+        out=torch.max(out,residual)
+        return out
+
+class RELUResBlock(nn.Module):
+    def __init__(self,num_neurons,dropout=0.0):
+        super(RELUResBlock, self).__init__()
+
+        model = []
+        model += [nn.Linear(num_neurons,num_neurons)]
+        model += [nn.ReLU(inplace=True)]
+        model += [nn.Linear(num_neurons,num_neurons)]
+        model += [nn.ReLU()]
+        if dropout > 0:
+            model += [nn.Dropout(p=dropout)]
+        self.model = nn.Sequential(*model)
+
+    def forward(self,x):
+        residual=x
+        out=self.model(x)
+        out+=residual
+        return out
+
+class LinearRELUBlock(nn.Module):
+    def __init__(self,num_neurons,dropout=0.0):
+        super(LinearRELUBlock,self).__init__()
+        model=[]
+        model += [nn.Linear(num_neurons,num_neurons)]
+        model += [nn.ReLU()]
+        if dropout>0:
+            model+= [nn.Dropout(p=dropout)]
+
+        self.model = nn.Sequential(*model)
+
+    def forward(self,x):
+       out=self.model(x)
+       return out
