@@ -31,6 +31,7 @@ parser.add_argument('--ndf', type=int, default=64)
 parser.add_argument('--niter', type=int, default=100, help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
+parser.add_argument('--dropout', type=float, default=0.5, help='dropout default=0.5')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
@@ -155,17 +156,17 @@ class _netG(nn.Module):
 
         # Residual Layers
         tch=ngf*8
-        main_block += [BATCHResBlock(tch, tch)]
-        main_block += [BATCHResBlock(tch, tch)]
-        main_block += [BATCHResBlock(tch, tch)]
+        main_block += [ResBlock(tch, tch)]
+        main_block += [ResBlock(tch, tch)]
+        main_block += [ResBlock(tch, tch)]
 
-        main_block += [BATCHResBlock(tch, tch)]
-        main_block += [BATCHResBlock(tch, tch)]
-        main_block += [BATCHResBlock(tch, tch)]
+        main_block += [ResBlock(tch, tch)]
+        main_block += [ResBlock(tch, tch)]
+        main_block += [ResBlock(tch, tch)]
 
-        main_block += [BATCHResBlock(tch, tch)]
-        main_block += [BATCHResBlock(tch, tch)]
-        main_block += [BATCHResBlock(tch, tch)]
+        #main_block += [BATCHResBlock(tch, tch)]
+        #main_block += [BATCHResBlock(tch, tch)]
+        #main_block += [BATCHResBlock(tch, tch)]
 
 
 
@@ -265,13 +266,14 @@ class _netD(nn.Module):
         main_block += [ nn.LeakyReLU(0.2, inplace=True) ]
         # state size. (ndf*8) x 4 x 4
         tch=ndf*8
-        main_block += [BATCHResBlock(tch, tch)]
-        main_block += [BATCHResBlock(tch, tch)]
-        main_block += [BATCHResBlock(tch, tch)]
+        main_block += [ResBlock(tch, tch,dropout=opt.dropout)]
+        main_block += [ResBlock(tch, tch,dropout=opt.dropout)]
+        main_block += [ResBlock(tch, tch,dropout=opt.dropout)]
 
-        #main_block += [BATCHResBlock(tch, tch)]
-        #main_block += [BATCHResBlock(tch, tch)]
-        #main_block += [BATCHResBlock(tch, tch)]
+        #main_block += [ResBlock(tch, tch,dropout=opt.dropout)]
+        #main_block += [ResBlock(tch, tch,dropout=opt.dropout)]
+        #main_block += [ResBlock(tch, tch,dropout=opt.dropout)]
+
 
         #main_block += [BATCHResBlock(tch, tch)]
         #main_block += [BATCHResBlock(tch, tch)]

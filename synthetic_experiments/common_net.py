@@ -78,6 +78,36 @@ class MAX_SELECTResBlock(nn.Module):
         out=torch.max(out,residual)
         return out
 
+class MAX_PARALLELResBlock(nn.Module):
+    def __init__(self,num_neurons,dropout=0.0):
+        super(MAX_PARALLELResBlock, self).__init__()
+
+        model_1 = []
+        model_1 += [nn.Linear(num_neurons,num_neurons)]
+        model_1 += [nn.ReLU(inplace=True)]
+        model_1 += [nn.Linear(num_neurons,num_neurons)]
+        if dropout > 0:
+            model_1 += [nn.Dropout(p=dropout)]
+        self.model_1 = nn.Sequential(*model_1)
+
+        model_2 = []
+        model_2 += [nn.Linear(num_neurons,num_neurons)]
+        model_2 += [nn.ReLU(inplace=True)]
+        model_2 += [nn.Linear(num_neurons,num_neurons)]
+        if dropout > 0:
+            model_2 += [nn.Dropout(p=dropout)]
+        self.model_2 = nn.Sequential(*model_2)
+
+
+    def forward(self,x):
+        residual=x
+        out_1=self.model_1(x)
+        out_2=self.model_2(x)
+        out_max=torch.max(out_1,out_2)
+        out = residual + out_max
+        return out
+
+
 class RELUResBlock(nn.Module):
     def __init__(self,num_neurons,dropout=0.0):
         super(RELUResBlock, self).__init__()

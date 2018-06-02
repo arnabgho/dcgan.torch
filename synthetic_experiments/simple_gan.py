@@ -39,7 +39,7 @@ parser.add_argument('--netG', default='', help="path to netG (to continue traini
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
 parser.add_argument('--outf', default='./simple_gan/', help='folder to output images and model checkpoints')
 parser.add_argument('--manualSeed', type=int,default=7, help='manual seed')
-
+parser.add_argument('--dataset', type=str, default='1d', help='which dataset')
 opt = parser.parse_args()
 print(opt)
 torch.manual_seed(7)
@@ -60,8 +60,11 @@ cudnn.benchmark = True
 
 if torch.cuda.is_available() and not opt.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda")
-
-dataset=MoG1DDataset()
+if opt.dataset == '1d':
+    dataset=MoG1DDataset()
+elif opt.dataset== 'swiss_roll':
+    dataset=SwissRollDataset()
+    opt.out_dim=3
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,shuffle=True, num_workers=int(opt.workers))
 ngpu=int(opt.ngpu)
 class _netG(nn.Module):
@@ -147,7 +150,7 @@ input=torch.FloatTensor(opt.batchSize,opt.out_dim)
 noise = torch.FloatTensor(opt.batchSize, opt.nz)
 fixed_noise = torch.FloatTensor(opt.batchSize, opt.nz).normal_(0, 1)
 label = torch.FloatTensor(opt.batchSize)
-generated_samples=np.zeros(opt.num_samples)
+generated_samples=np.zeros((opt.num_samples,opt.out_dim))
 real_label = 1
 fake_label = 0
 
@@ -170,14 +173,15 @@ for epoch in range(opt.niter):
         noise.resize_(opt.batchSize, opt.nz).normal_(0, 1)
         noisev = Variable(noise)
         fake = netG(noisev)
-        fake_cpu_np=fake.data.cpu().numpy().reshape(opt.batchSize)
+        fake_cpu_np=fake.data.cpu().numpy().reshape(opt.batchSize,opt.out_dim)
         if num_sampled+opt.batchSize<opt.num_samples:
             generated_samples[num_sampled:num_sampled+opt.batchSize ] = fake_cpu_np
         else:
             generated_samples[num_sampled:opt.num_samples] = fake_cpu_np[ 0:opt.num_samples-num_sampled ]
         num_sampled+=opt.batchSize
-    #dataset.plot_generated_samples(generated_samples,filename=opt.outf+'generated_samples_'+str(epoch)+'.png')
-    dataset.plot_generated_samples_discriminator(generated_samples,netD,opt.batchSize,filename=opt.outf+'generated_samples_'+str(epoch)+'.png')
+    dataset.plot_generated_samples(generated_samples,filename=opt.outf+'generated_samples_'+str(epoch)+'.png')
+    if opt.dataset=='1d':
+        dataset.plot_generated_samples_discriminator(generated_samples,netD,opt.batchSize,filename=opt.outf+'generated_samples_'+str(epoch)+'.png')
     for i,data in enumerate(dataloader,0):
         ############################
         # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))

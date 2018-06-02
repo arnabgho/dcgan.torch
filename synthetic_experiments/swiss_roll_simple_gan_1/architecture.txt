@@ -1,0 +1,21 @@
+_netD (
+  (main): Sequential (
+    (0): Linear (3 -> 128)
+    (1): Dropout (p = 0.5)
+    (2): ReLU ()
+    (3): Linear (128 -> 128)
+    (4): Dropout (p = 0.5)
+    (5): Linear (128 -> 1)
+    (6): Sigmoid ()
+  )
+)
+_netG (
+  (main): Sequential (
+    (0): Linear (10 -> 128)
+    (1): Dropout (p = 0.5)
+    (2): ReLU ()
+    (3): Linear (128 -> 128)
+    (4): Dropout (p = 0.5)
+    (5): Linear (128 -> 3)
+  )
+)

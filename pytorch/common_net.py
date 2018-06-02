@@ -108,6 +108,222 @@ class ResBlock(nn.Module):
     out += residual
     return out
 
+class upDeconvBATCHResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1):
+    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+    super(upDeconvBATCHResBlock, self).__init__()
+    model = []
+    model += [self.conv3x3(inplanes, inplanes, stride)]
+    model += [nn.BatchNorm2d(inplanes)]
+    model += [nn.ReLU(inplace=True)]
+    model += [ nn.ConvTranspose2d( inplanes , inplanes , 4, 2, 1, bias=False)]
+    model += [nn.BatchNorm2d(inplanes)]
+    if dropout > 0:
+      model += [nn.Dropout(p=dropout)]
+    self.model = nn.Sequential(*model)
+    self.model.apply(gaussian_weights_init)
+    self.final = self.conv3x3(inplanes,planes,stride)
+    self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
+  def forward(self, x):
+    residual = self.upsample(x)
+    out = self.model(x)
+    out += residual
+    out = self.final(out)
+    return out
+
+class upDeconvResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1):
+    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+    super(upDeconvResBlock, self).__init__()
+    model = []
+    model += [self.conv3x3(inplanes, inplanes, stride)]
+    #model += [nn.BatchNorm2d(inplanes)]
+    model += [nn.ReLU(inplace=True)]
+    model += [nn.ConvTranspose2d( inplanes , inplanes , 4, 2, 1, bias=False)]
+    #model += [nn.BatchNorm2d(inplanes)]
+    if dropout > 0:
+      model += [nn.Dropout(p=dropout)]
+    self.model = nn.Sequential(*model)
+    self.model.apply(gaussian_weights_init)
+    self.final = self.conv3x3(inplanes,planes,stride)
+    self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
+  def forward(self, x):
+    residual = self.upsample(x)
+    out = self.model(x)
+    out += residual
+    out = self.final(out)
+    return out
+
+class downConvBATCHResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1):
+    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+    super(downConvBATCHResBlock, self).__init__()
+    model = []
+    model += [self.conv3x3(inplanes, inplanes, stride)]
+    model += [nn.BatchNorm2d(inplanes)]
+    model += [nn.ReLU(inplace=True)]
+    model += [nn.Conv2d( inplanes , inplanes , 4, 2, 1, bias=False  )]
+    model += [nn.BatchNorm2d(inplanes)]
+    if dropout > 0:
+      model += [nn.Dropout(p=dropout)]
+    self.model = nn.Sequential(*model)
+    self.model.apply(gaussian_weights_init)
+    self.final = self.conv3x3(inplanes,planes,stride)
+    self.downsample = nn.AvgPool2d((2, 2), stride=(2, 2))
+  def forward(self, x):
+    residual = self.downsample(x)
+    out = self.model(x)
+    out += residual
+    out = self.final(out)
+    return out
+
+class downConvResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1):
+    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+    super(downConvResBlock, self).__init__()
+    model = []
+    model += [self.conv3x3(inplanes, inplanes, stride)]
+    #model += [nn.BatchNorm2d(inplanes)]
+    model += [nn.ReLU(inplace=True)]
+    model += [nn.Conv2d( inplanes , inplanes , 4, 2, 1, bias=False  )]
+    #model += [nn.BatchNorm2d(inplanes)]
+    if dropout > 0:
+      model += [nn.Dropout(p=dropout)]
+    self.model = nn.Sequential(*model)
+    self.model.apply(gaussian_weights_init)
+    self.final = self.conv3x3(inplanes,planes,stride)
+    self.downsample = nn.AvgPool2d((2, 2), stride=(2, 2))
+  def forward(self, x):
+    residual = self.downsample(x)
+    out = self.model(x)
+    out += residual
+    out = self.final(out)
+    return out
+
+
+class UpResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1):
+    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+    super(UpResBlock, self).__init__()
+
+    self.model1=ResBlock(inplanes,inplanes,stride,dropout)
+    self.model2=ResBlock(inplanes,inplanes,stride,dropout)
+    self.model3=ResBlock(inplanes,inplanes,stride,dropout)
+    self.model4=ResBlock(inplanes,inplanes,stride,dropout)
+
+    self.model1.apply(gaussian_weights_init)
+    self.model2.apply(gaussian_weights_init)
+    self.model3.apply(gaussian_weights_init)
+    self.model4.apply(gaussian_weights_init)
+    self.final = self.conv3x3(inplanes,planes,stride)
+  def forward(self, x):
+    out1=self.model1(x)
+    out2=self.model2(x)
+    out3=self.model3(x)
+    out4=self.model4(x)
+
+    out12 = torch.cat([out1,out2],2)
+    out34 = torch.cat([out3,out4],2)
+    out = torch.cat([ out12, out34 ],3)
+    out = self.final(out)
+    return out
+
+class UpBATCHResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1):
+    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+    super(UpBATCHResBlock, self).__init__()
+
+    self.model1=ResBlock(inplanes,inplanes,stride,dropout)
+    self.model2=ResBlock(inplanes,inplanes,stride,dropout)
+    self.model3=ResBlock(inplanes,inplanes,stride,dropout)
+    self.model4=ResBlock(inplanes,inplanes,stride,dropout)
+
+    self.model1.apply(gaussian_weights_init)
+    self.model2.apply(gaussian_weights_init)
+    self.model3.apply(gaussian_weights_init)
+    self.model4.apply(gaussian_weights_init)
+    self.final = self.conv3x3(inplanes,planes,stride)
+  def forward(self, x):
+    out1=self.model1(x)
+    out2=self.model2(x)
+    out3=self.model3(x)
+    out4=self.model4(x)
+
+    out12 = torch.cat([out1,out2],2)
+    out34 = torch.cat([out3,out4],2)
+    out = torch.cat([ out12, out34 ],3)
+    out = self.final(out)
+    return out
+
+class UpRANDBATCHResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1):
+    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+    super(UpRANDBATCHResBlock, self).__init__()
+
+    self.model1=ResBlock(inplanes,inplanes,stride,dropout)
+    self.model2=ResBlock(inplanes,inplanes,stride,dropout)
+    self.model3=ResBlock(inplanes,inplanes,stride,dropout)
+    self.model4=ResBlock(inplanes,inplanes,stride,dropout)
+
+    self.model1.apply(gaussian_weights_init)
+    self.model2.apply(gaussian_weights_init)
+    self.model3.apply(gaussian_weights_init)
+    self.model4.apply(gaussian_weights_init)
+    self.final = self.conv3x3(inplanes,planes,stride)
+  def forward(self, x):
+    out1=self.model1(x)
+    out2=self.model2(x)
+    out3=self.model3(x)
+    out4=self.model4(x)
+
+    choice=np.random.randint(2)
+    if choice==0:
+        out12 = torch.cat([out1,out2],2)
+        out34 = torch.cat([out3,out4],2)
+    elif choice==1:
+        out12 = torch.cat([out3,out4],2)
+        out34 = torch.cat([out1,out2],2)
+
+    out = torch.cat([ out12, out34 ],3)
+    out = self.final(out)
+    return out
+
+class MAX_SELECTResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1):
+    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+    super(MAX_SELECTResBlock, self).__init__()
+    model = []
+    model += [self.conv3x3(inplanes, planes, stride)]
+    #model += [nn.InstanceNorm2d(planes)]
+    model += [nn.ReLU(inplace=True)]
+    model += [self.conv3x3(planes, planes)]
+    #model += [nn.InstanceNorm2d(planes)]
+    if dropout > 0:
+      model += [nn.Dropout(p=dropout)]
+    self.model = nn.Sequential(*model)
+    self.model.apply(gaussian_weights_init)
+
+  def forward(self, x):
+    residual = x
+    out = self.model(x)
+    out = torch.max(out,residual)
+    return out
 class LeakyReLUConv2d(nn.Module):
   def __init__(self, n_in, n_out, kernel_size, stride, padding=0):
     super(LeakyReLUConv2d, self).__init__()

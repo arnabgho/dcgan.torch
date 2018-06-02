@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pylab as pl
 from torch.autograd import Variable
+import matplotlib.pyplot as plt
+import mpl_toolkits.mplot3d.axes3d as p3
+from sklearn.datasets.samples_generator import make_swiss_roll
 sns.set(color_codes=True)
 
 class MoG1DDataset(Dataset):
@@ -121,6 +124,84 @@ class MoG1DDataset(Dataset):
         for i in range(self.num_samples):
             samples[i]=np.random.normal(self.mode_info['modes'][ mode_selections[i]], self.mode_info[ 'stds'][ mode_selections[i] ] )
 
+        np.save(filename,samples)
+        return samples
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self,idx):
+        return self.samples[idx]
+
+
+
+class SwissRollDataset(Dataset):
+    "SwissRoll Dataset"
+    def __init__(self,spec_file='specsSwissRoll.txt',num_samples=1000000,load_file='dataSwissRoll.npy',load=False):
+        self.spec_file=spec_file
+        self.num_samples=num_samples
+        self.mode_info=self.read_spec_file(self.spec_file)
+        if load==False:
+            self.samples=self.generate_samples(load_file)
+        else:
+            self.samples=np.load(load_file)
+        self.plot_samples()
+
+
+    def plot_samples(self,filename='samplesSwissRoll.png'):
+        fig = plt.figure()
+        ax = p3.Axes3D(fig)
+        ax.view_init(7, -80)
+        ax.scatter(self.samples[:, 0], self.samples[:, 1], self.samples[:, 2],color='blue')
+        plt.savefig(filename)
+        plt.clf()
+        plt.close()
+    def plot_generated_samples(self,generated_samples,filename='generated_samples.png'):
+        fig = plt.figure()
+        ax = p3.Axes3D(fig)
+        ax.view_init(7, -80)
+        ax.scatter(generated_samples[:, 0], generated_samples[:, 1], generated_samples[:, 2],color='blue')
+        plt.savefig(filename)
+        plt.clf()
+        plt.close()
+
+
+    def read_spec_file(self,spec_file):
+        xs=[]
+        ys=[]
+        zs=[]
+        densities=[]
+        lines=[]
+        with open(spec_file) as f:
+            for line in f:
+                lines.append(line)
+
+        total_density=0
+        for line in lines:
+            if len(line)==0:
+                continue
+            line=line.rstrip()
+            x=float(line.split(' ')[0])
+            y=float(line.split(' ')[1])
+            z=float(line.split(' ')[2])
+            density=float(line.split(' ')[3])
+            total_density=density+total_density
+            xs.append(x)
+            ys.append(y)
+            zs.append(z)
+            densities.append(density)
+
+        for (i,density) in enumerate(densities):
+            densities[i]=density/total_density
+        return {'xs':xs, 'ys':ys , 'zs':zs , 'densities':densities}
+
+    def generate_samples(self,filename):
+        noise = 0.05
+        samples, _ = make_swiss_roll(self.num_samples, noise)
+        mode_selections=np.random.choice(range(len(self.mode_info['densities'])), size = self.num_samples, p = self.mode_info['densities'])
+
+        for i in range(self.num_samples):
+            samples[i]=samples[i] + np.array([ self.mode_info['xs'][ mode_selections[i]]  , self.mode_info['ys'][ mode_selections[i]] , self.mode_info['zs'][ mode_selections[i]]  ])
         np.save(filename,samples)
         return samples
 

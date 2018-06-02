@@ -1,0 +1,270 @@
+_netD (
+  (main): Sequential (
+    (0): Linear (3 -> 4)
+    (1): ReLU ()
+    (2): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (3): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (4): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (5): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (6): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (7): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (8): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (9): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (10): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (11): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (12): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (13): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (14): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (15): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (16): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (17): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (18): Linear (4 -> 1)
+    (19): Sigmoid ()
+  )
+)
+_netG (
+  (main): Sequential (
+    (0): Linear (10 -> 4)
+    (1): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (2): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (3): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (4): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (5): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (6): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (7): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (8): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (9): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (10): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (11): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (12): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (13): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (14): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (15): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (16): ResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): Dropout (p = 0.5)
+      )
+    )
+    (17): Linear (4 -> 3)
+  )
+)

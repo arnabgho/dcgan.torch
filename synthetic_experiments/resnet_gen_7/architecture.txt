@@ -1,0 +1,270 @@
+_netD (
+  (main): Sequential (
+    (0): Linear (1 -> 4)
+    (1): ReLU ()
+    (2): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (3): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (4): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (5): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (6): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (7): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (8): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (9): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (10): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (11): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (12): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (13): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (14): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (15): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (16): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (17): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (18): Linear (4 -> 1)
+    (19): Sigmoid ()
+  )
+)
+_netG (
+  (main): Sequential (
+    (0): Linear (10 -> 4)
+    (1): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (2): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (3): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (4): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (5): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (6): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (7): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (8): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (9): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (10): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (11): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (12): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (13): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (14): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (15): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (16): RELUResBlock (
+      (model): Sequential (
+        (0): Linear (4 -> 4)
+        (1): ReLU (inplace)
+        (2): Linear (4 -> 4)
+        (3): ReLU ()
+      )
+    )
+    (17): Linear (4 -> 1)
+  )
+)

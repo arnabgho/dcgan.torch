@@ -1,0 +1,31 @@
+_netD (
+  (main): Sequential (
+    (0): Linear (1 -> 512)
+    (1): ReLU ()
+    (2): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (512 -> 512)
+        (1): BatchNorm1d(512, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (512 -> 512)
+        (4): BatchNorm1d(512, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (3): Linear (512 -> 1)
+  )
+)
+_netG (
+  (main): Sequential (
+    (0): Linear (10 -> 512)
+    (1): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (512 -> 512)
+        (1): BatchNorm1d(512, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (512 -> 512)
+        (4): BatchNorm1d(512, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (2): Linear (512 -> 1)
+  )
+)

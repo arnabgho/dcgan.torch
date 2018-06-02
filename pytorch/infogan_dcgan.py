@@ -32,6 +32,7 @@ parser.add_argument('--ndf', type=int, default=64)
 parser.add_argument('--niter', type=int, default=25, help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
+parser.add_argument('--lambda_continuous', type=float, default=1, help='lambda_continuous default=0.5')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
@@ -344,6 +345,8 @@ for epoch in range(opt.niter):
         optimizerD.zero_grad() #netD.zero_grad()
         real_cpu, _ = data
         batch_size = real_cpu.size(0)
+        if batch_size!=opt.batchSize:
+            continue
         if opt.cuda:
             real_cpu = real_cpu.cuda()
         input.resize_as_(real_cpu).copy_(real_cpu)
@@ -382,7 +385,7 @@ for epoch in range(opt.niter):
 
         q_logits,q_mu,q_var = netQ(fe_output)
         errG_discrete = criterion_discrete(q_logits,dis_c)
-        errG_continuous = criterion_continuous(con_c , q_mu , q_var)
+        errG_continuous = criterion_continuous(con_c , q_mu , q_var) * opt.lambda_continuous
 
         errG = errG_GAN + errG_continuous + errG_discrete
         errG.backward()

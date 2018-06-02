@@ -1,0 +1,17 @@
+_netD (
+  (main): Sequential (
+    (0): Linear (1 -> 128)
+    (1): ReLU ()
+    (2): Linear (128 -> 128)
+    (3): Linear (128 -> 1)
+    (4): Sigmoid ()
+  )
+)
+_netG (
+  (main): Sequential (
+    (0): Linear (10 -> 128)
+    (1): ReLU ()
+    (2): Linear (128 -> 128)
+    (3): Linear (128 -> 1)
+  )
+)

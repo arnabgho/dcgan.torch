@@ -1,0 +1,158 @@
+_netD (
+  (main): Sequential (
+    (0): Linear (1 -> 8)
+    (1): ReLU ()
+    (2): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (3): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (4): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (5): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (6): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (7): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (8): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (9): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (10): Linear (8 -> 1)
+    (11): Sigmoid ()
+  )
+)
+_netG (
+  (main): Sequential (
+    (0): Linear (10 -> 8)
+    (1): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (2): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (3): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (4): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (5): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (6): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (7): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (8): BATCHResBlock (
+      (model): Sequential (
+        (0): Linear (8 -> 8)
+        (1): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+        (2): ReLU (inplace)
+        (3): Linear (8 -> 8)
+        (4): BatchNorm1d(8, eps=1e-05, momentum=0.1, affine=True)
+      )
+    )
+    (9): Linear (8 -> 1)
+  )
+)

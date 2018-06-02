@@ -1,0 +1,248 @@
+from __future__ import print_function
+import argparse
+import os
+import random
+import torch
+import torch.nn as nn
+import torch.nn.parallel
+import torch.backends.cudnn as cudnn
+import torch.optim as optim
+import torch.utils.data
+import torchvision.datasets as dset
+import torchvision.transforms as transforms
+import torchvision.utils as vutils
+from torch.autograd import Variable
+import visdom
+from common_net import *
+import math
+import sys
+from data_generator import *
+vis = visdom.Visdom()
+vis.env = 'resnet_gen'
+parser = argparse.ArgumentParser()
+parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
+parser.add_argument('--batchSize', type=int, default=4096, help='input batch size')
+parser.add_argument('--out_dim', type=int, default=1, help='the output dimension')
+parser.add_argument('--nz', type=int, default=10, help='size of the latent z vector')
+parser.add_argument('--ngf', type=int, default=4)
+parser.add_argument('--ndf', type=int, default=4)
+parser.add_argument('--ngres', type=int, default=16)
+parser.add_argument('--ndres', type=int, default=16)
+parser.add_argument('--ncommon', type=int, default=16)
+parser.add_argument('--niter', type=int, default=1000, help='number of epochs to train for')
+parser.add_argument('--num_samples', type=int, default=1000000, help='number of samples in the dataset')
+parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
+parser.add_argument('--dropout', type=float, default=0.0, help='dropout rate, default=0')
+parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
+parser.add_argument('--cuda', action='store_true', help='enables cuda')
+parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
+parser.add_argument('--netG', default='', help="path to netG (to continue training)")
+parser.add_argument('--netD', default='', help="path to netD (to continue training)")
+parser.add_argument('--outf', default='./self_play_resnet_gen/', help='folder to output images and model checkpoints')
+parser.add_argument('--manualSeed', type=int,default=7, help='manual seed')
+parser.add_argument('--dataset', type=str, default='1d', help='which dataset')
+opt = parser.parse_args()
+print(opt)
+torch.manual_seed(7)
+try:
+    os.makedirs(opt.outf)
+except OSError:
+    pass
+
+if opt.manualSeed is None:
+    opt.manualSeed = random.randint(1, 10000)
+print("Random Seed: ", opt.manualSeed)
+random.seed(opt.manualSeed)
+torch.manual_seed(opt.manualSeed)
+if opt.cuda:
+    torch.cuda.manual_seed_all(opt.manualSeed)
+
+cudnn.benchmark = True
+
+if torch.cuda.is_available() and not opt.cuda:
+    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+if opt.dataset == '1d':
+    dataset=MoG1DDataset()
+elif opt.dataset== 'swiss_roll':
+    dataset=SwissRollDataset()
+    opt.out_dim=3
+dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,shuffle=True, num_workers=int(opt.workers))
+
+ngpu=int(opt.ngpu)
+class _netCommon(nn.Module):
+    def __init__(self,ngpu):
+        super(_netCommon,self).__init__()
+        self.ngpu=ngpu
+        main_block=[]
+
+        for i in range(opt.ncommon):
+            main_block+= [ResBlock(opt.ngf,opt.dropout)]
+
+        self.main=nn.Sequential(*main_block)
+
+    def forward(self,input):
+        if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:
+            output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
+        else:
+            output = self.main(input)
+        return output
+
+netCommon = _netCommon(opt.ngpu)
+class _netG(nn.Module):
+    def __init__(self,ngpu):
+        super(_netG,self).__init__()
+        self.ngpu=ngpu
+        #Input is z going to series of residual blocks
+        self.main_top =nn.Sequential( nn.Linear(opt.nz,opt.ngf) , nn.ReLU())
+        # Sets of residual blocks start
+
+        #for i in range(opt.ngres):
+        #    main_block+= [ResBlock(opt.ngf,opt.dropout)] #[BATCHResBlock(opt.ngf,opt.dropout)]
+
+        # Final layer to map to 1D
+
+        self.main_bottom= nn.Sequential( nn.Linear(opt.ngf,opt.out_dim) )
+
+    def forward(self, input):
+        output = self.main_top(input)
+        output = netCommon(output)
+        output = self.main_bottom(output)
+
+        return output
+
+
+netG = _netG(ngpu)
+
+if opt.netG != '':
+    netG.load_state_dict(torch.load(opt.netG))
+
+class _netD(nn.Module):
+    def __init__(self,ngpu):
+        super(_netD,self).__init__()
+        self.ngpu=ngpu
+        main_block=[]
+
+        #Input is 1D going to series of residual blocks
+        self.main_top = nn.Sequential( nn.Linear(opt.out_dim,opt.ngf) , nn.ReLU())
+        # Sets of residual blocks start
+
+        #for i in range(opt.ndres):
+        #    main_block+= [ResBlock(opt.ngf,opt.dropout)] # [BATCHResBlock(opt.ngf,opt.dropout)]
+
+        # Final layer to map to sigmoid output
+
+
+        self.main_bottom = nn.Sequential( nn.Linear(opt.ngf,1) , nn.Sigmoid() )
+
+    def forward(self, input):
+        output = self.main_top(input)
+        output = netCommon(output)
+        output = self.main_bottom(output)
+
+        return output
+
+
+netD = _netD(ngpu)
+
+if opt.netD != '':
+    netD.load_state_dict(torch.load(opt.netD))
+
+
+with open(opt.outf+'/architecture.txt' , 'w'  ) as f:
+    print(netD,file=f)
+    print(netG,file=f)
+    print(netCommon, file=f)
+criterion=nn.BCELoss()
+
+input=torch.FloatTensor(opt.batchSize,opt.out_dim)
+noise = torch.FloatTensor(opt.batchSize, opt.nz)
+fixed_noise = torch.FloatTensor(opt.batchSize, opt.nz).normal_(0, 1)
+label = torch.FloatTensor(opt.batchSize)
+generated_samples=np.zeros((opt.num_samples,opt.out_dim))
+real_label = 1
+fake_label = 0
+
+if opt.cuda:
+    netD.cuda()
+    netG.cuda()
+    netCommon.cuda()
+    criterion.cuda()
+    input, label = input.cuda(), label.cuda()
+    noise, fixed_noise = noise.cuda(), fixed_noise.cuda()
+
+fixed_noise = Variable(fixed_noise)
+
+#setup optimizer
+optimizerD = optim.Adam(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+optimizerG = optim.Adam(netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+optimizerC = optim.Adam(netCommon.parameters() , lr=opt.lr, betas=(opt.beta1, 0.999))
+
+for epoch in range(opt.niter):
+    num_sampled=0
+    while(num_sampled<opt.num_samples):
+        noise.resize_(opt.batchSize, opt.nz).normal_(0, 1)
+        noisev = Variable(noise)
+        fake = netG(noisev)
+        fake_cpu_np=fake.data.cpu().numpy().reshape(opt.batchSize,opt.out_dim)
+        if num_sampled+opt.batchSize<opt.num_samples:
+            generated_samples[num_sampled:num_sampled+opt.batchSize ] = fake_cpu_np
+        else:
+            generated_samples[num_sampled:opt.num_samples] = fake_cpu_np[ 0:opt.num_samples-num_sampled ]
+        num_sampled+=opt.batchSize
+    file_num= '{0:05d}'.format(epoch)
+    dataset.plot_generated_samples(generated_samples,filename=opt.outf+'generated_samples_'+ file_num +'.png')
+    if opt.dataset=='1d':
+        dataset.plot_generated_samples_discriminator(generated_samples,netD,opt.batchSize,filename=opt.outf+'disc_generated_samples_'+ file_num +'.png')
+    for i,data in enumerate(dataloader,0):
+        ############################
+        # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
+        ###########################
+        # train with real
+        netD.zero_grad()
+        real_cpu = data.float()
+        batch_size = real_cpu.size(0)
+        if batch_size!=opt.batchSize:
+            continue
+        if opt.cuda:
+            real_cpu = real_cpu.cuda()
+        real_cpu=real_cpu.resize_as_(input)
+        input.resize_as_(real_cpu).copy_(real_cpu)
+        label.resize_(batch_size).fill_(real_label)
+        inputv = Variable(input)
+        labelv = Variable(label)
+
+        output = netD(inputv)
+        errD_real = criterion(output, labelv)
+        errD_real.backward()
+        D_x = output.data.mean()
+
+        # train with fake
+        noise.resize_(batch_size, opt.nz).normal_(0, 1)
+        noisev = Variable(noise)
+        fake = netG(noisev)
+        labelv = Variable(label.fill_(fake_label))
+        output = netD(fake.detach())
+        errD_fake = criterion(output, labelv)
+        errD_fake.backward()
+        D_G_z1 = output.data.mean()
+        errD = errD_real + errD_fake
+        optimizerD.step()
+        #optimizerC.step()
+        ############################
+        # (2) Update G network: maximize log(D(G(z)))
+        ###########################
+        netG.zero_grad()
+        labelv = Variable(label.fill_(real_label))  # fake labels are real for generator cost
+        output = netD(fake)
+        errG = criterion(output, labelv)
+        errG.backward()
+        D_G_z2 = output.data.mean()
+        optimizerG.step()
+
+        optimizerC.step()
+	print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
+              % (epoch, opt.niter, i, len(dataloader),
+                 errD.data[0], errG.data[0], D_x, D_G_z1, D_G_z2))
+    # do checkpointing
+        torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch))
+        torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch))
