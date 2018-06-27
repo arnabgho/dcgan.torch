@@ -60,7 +60,7 @@ class ResBlock(nn.Module):
         model += [nn.BatchNorm1d(num_neurons)] # Just testing might be removed
         model += [nn.ReLU(inplace=True)]
         model += [nn.Linear(num_neurons,num_neurons)]
-        #model += [nn.BatchNorm1d(num_neurons)] # Just testing might be removed
+        model += [nn.BatchNorm1d(num_neurons)] # Just testing might be removed
         if dropout > 0:
             model += [nn.Dropout(p=dropout)]
         self.model = nn.Sequential(*model)

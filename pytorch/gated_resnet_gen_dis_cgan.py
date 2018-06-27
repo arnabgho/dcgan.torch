@@ -187,7 +187,7 @@ class GatedResnetConvResnetD(nn.Module):
 
         self.label_embedding = nn.Embedding(opt.n_classes, opt.nsalient)
         self.main_latter = nn.Sequential(
-        nn.Conv2d(opt.nc, opt.ndf, 4, 2, 1),
+        nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1),
         nn.LeakyReLU(0.1, inplace=True),
         nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False),
         nn.BatchNorm2d(2*opt.ndf),
@@ -220,8 +220,8 @@ class GatedResnetConvResnetD(nn.Module):
         gate_block+=[ nn.ReLU()]
         for i in range(opt.ndres_gate):
             gate_block+=[ResBlock(opt.ndf_gate,opt.dropout)]
-        gate_block+=[ nn.Linear(opt.ndf_gate,opt.ngres) ]
-        gate_block+= [ nn.Sigmoid()]# [nn.Softmax()]  #[ nn.Sigmoid()]
+        gate_block+=[ nn.Linear(opt.ndf_gate,opt.ndres) ]
+        gate_block+= [nn.Sigmoid()] #[nn.Softmax()]  #[ nn.Sigmoid()]
 
         self.gate=nn.Sequential(*gate_block)
 
@@ -236,7 +236,7 @@ class GatedResnetConvResnetD(nn.Module):
             alpha = alpha.resize(self.opt.batchSize,1,1,1)
             output=self.main[i](output,alpha)
 
-        output = self.main_latter(input_main)
+        output = self.main_latter(output)
         return output
 # Loss functions
 adversarial_loss = torch.nn.BCELoss()  #torch.nn.MSELoss()
@@ -266,7 +266,7 @@ dataloader = torch.utils.data.DataLoader(
 
 # Optimizers
 optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
-optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
+optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=10*opt.lr, betas=(opt.b1, opt.b2))
 
 FloatTensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if cuda else torch.LongTensor
@@ -339,9 +339,13 @@ for epoch in range(opt.n_epochs):
         d_loss.backward()
         optimizer_D.step()
 
-        print ("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, opt.n_epochs, i, len(dataloader),
-                                                            d_loss.item(), g_loss.item()))
+        print ("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [D_real: %f] [D_fake: %f]" % (epoch, opt.n_epochs, i, len(dataloader),
+                                                            d_loss.item(), g_loss.item() , d_fake_loss.item() , d_real_loss.item() ))
 
         batches_done = epoch * len(dataloader) + i
         if batches_done % opt.sample_interval == 0:
             sample_image(n_row=10, batches_done=batches_done)
+
+            # do checkpointing
+            torch.save(generator.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, batches_done))
+            torch.save(discriminator.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, batches_done))
