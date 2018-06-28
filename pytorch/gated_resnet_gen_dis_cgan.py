@@ -255,14 +255,14 @@ if cuda:
     auxiliary_loss.cuda()
 
 # Configure data loader
-dataloader = torch.utils.data.DataLoader(
-    datasets.MNIST('./mnist', train=True, download=True,
-                   transform=transforms.Compose([
-                        transforms.Resize(opt.img_size),
-                        transforms.ToTensor(),
-                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                   ])),
-    batch_size=opt.batch_size, shuffle=True)
+dataset = datasets.CIFAR10('./cifar_dataset', transform=transforms.Compose([ transforms.CenterCrop(opt.img_size) ,  transforms.ToTensor()]), download=True)
+#dataset= datasets.MNIST('./mnist', train=True, download=True,
+#                   transform=transforms.Compose([
+#                        transforms.Resize(opt.img_size),
+#                        transforms.ToTensor(),
+#                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+#                   ]))
+dataloader = torch.utils.data.DataLoader( dataset,batch_size=opt.batch_size, shuffle=True)
 
 # Optimizers
 optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
