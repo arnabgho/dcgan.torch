@@ -16,8 +16,9 @@ import visdom
 from common_net import *
 import math
 import copy
+from torch.nn.utils import spectral_norm
 vis = visdom.Visdom()
-vis.env = 'madgan_unit'
+vis.env = 'madgan_unit_sn'
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', required=True, help='cifar10 | lsun | imagenet | folder | lfw | fake')
 parser.add_argument('--dataroot', required=True, help='path to dataset')
@@ -36,7 +37,7 @@ parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='./madgan_unit', help='folder to output images and model checkpoints')
+parser.add_argument('--outf', default='./madgan_unit_sn/', help='folder to output images and model checkpoints')
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 
 opt = parser.parse_args()
@@ -168,23 +169,23 @@ class _netD(nn.Module):
         ch = 64
         n_enc_front_blk  = 3
         n_enc_latter_blk = 1  #2
-        n_enc_res_blk    = 1
-        n_enc_shared_blk = 3
+        n_enc_res_blk    = 3
+        n_enc_shared_blk = 1
         encA=[]
-        encA += [LeakyReLUConv2d(input_dim_a, ch, kernel_size=7, stride=2, padding=1)]
+        encA += [ SNLeakyReLUConv2d(input_dim_a, ch, kernel_size=7, stride=2, padding=1 ) ]
         tch=ch
         for i in range(0,n_enc_front_blk):
-            encA += [ReLUINSConv2d(tch, tch * 2, kernel_size=3, stride=2, padding=1)]
+            encA += [ SNReLUINSConv2d(tch, tch * 2, kernel_size=3, stride=2, padding=1) ]
             tch *= 2
         for i in range(0,n_enc_latter_blk):
-            encA += [ReLUINSConv2d(tch, tch , kernel_size=3, stride=2, padding=1)]  #[ReLUINSConv2d(tch, tch , kernel_size=3, stride=2, padding=1)]
+            encA += [ SNReLUINSConv2d(tch, tch , kernel_size=3, stride=2, padding=1) ]  #[ReLUINSConv2d(tch, tch , kernel_size=3, stride=2, padding=1)]
 
         for i in range(opt.nresidual):
-            encA += [INSResBlock(tch, tch)]
+            encA += [ SNINSResBlock(tch, tch)  ]
+        encA += [ spectral_norm( nn.Conv2d(tch, tch , 3, 2, 1,bias=False) ) ]
         #encA += [INSResBlock(tch, tch)]
         #encA += [INSResBlock(tch, tch)]
         #encA+=[nn.Softmax()]
-        encA += [nn.Conv2d(tch, tch , 3, 2, 1,bias=False)]
         self.fch=tch
         #for i in range(0, n_enc_res_blk):
         #    encA += [INSResBlock(tch, tch)]
@@ -193,7 +194,7 @@ class _netD(nn.Module):
         #    encA += [INSResBlock(tch, tch)]
 
         self.linear=nn.Sequential(
-        nn.Conv2d(self.fch,ngen+1,1,1,0,bias=False),
+        spectral_norm(nn.Conv2d(self.fch,ngen+1,1,1,0,bias=False)) ,
         #nn.Sigmoid()
         )
         #encA += [GaussianNoiseLayer()]
@@ -259,7 +260,7 @@ for epoch in range(opt.niter):
         label.resize_(batch_size).fill_(real_label)
         inputv = Variable(input)
         labelv = Variable(label)
-
+        print(inputv.data.size())
         output = netD(inputv)
         errD_real = criterion(output, labelv)
         errD_real.backward()
