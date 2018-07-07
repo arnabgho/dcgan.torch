@@ -9,6 +9,7 @@
 
 
 ## Parameters
+from __future__ import print_function
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--image_size', type=int, default=64)
@@ -42,7 +43,7 @@ parser.add_argument('--spectral_G', type=bool, default=False, help='If True, use
 parser.add_argument('--weight_decay', type=float, default=0, help='L2 regularization weight. Helps convergence but leads to artifacts in images, not recommended.')
 parser.add_argument('--gen_extra_images', type=int, default=50000, help='Generate additional images with random fake cats in calculating FID (Recommended to use the same amount as the size of the dataset; for CIFAR-10 we use 50k, but most people use 10k) It must be a multiple of 100.')
 parser.add_argument('--gen_every', type=int, default=100000, help='Generate additional images with random fake cats every x iterations. Used in calculating FID.')
-parser.add_argument('--extra_folder', default='.//Output/Extra', help='Folder for extra photos (different so that my dropbox does not get overwhelmed with 50k pictures)')
+parser.add_argument('--extra_folder', default='./Extra', help='Folder for extra photos (different so that my dropbox does not get overwhelmed with 50k pictures)')
 parser.add_argument('--show_graph', type=bool, default=False, help='If True, show gradients graph. Really neat for debugging.')
 parser.add_argument('--no_batch_norm_G', type=bool, default=False, help='If True, no batch norm in G.')
 parser.add_argument('--no_batch_norm_D', type=bool, default=False, help='If True, no batch norm in D.')
@@ -94,19 +95,19 @@ if param.seed is not None:
 import os
 run = 0
 # -*- coding: future_fstrings -*-
-base_dir = f"{param.output_folder}/{title}-{run}"
+base_dir = "{}/{}-{}".format((param.output_folder), (title), (run))
 while os.path.exists(base_dir):
 	run += 1
-	base_dir = f"{param.output_folder}/{title}-{run}"
+	base_dir = "{}/{}-{}".format((param.output_folder), (title), (run))
 os.mkdir(base_dir)
-logs_dir = f"{base_dir}/logs"
+logs_dir = "{}/logs".format((base_dir))
 os.mkdir(logs_dir)
-os.mkdir(f"{base_dir}/images")
-if param.gen_extra_images > 0 and not os.path.exists(f"{param.extra_folder}"):
-	os.mkdir(f"{param.extra_folder}")
+os.mkdir("{}/images".format((base_dir)))
+if param.gen_extra_images > 0 and not os.path.exists("{}".format((param.extra_folder))):
+	os.mkdir("{}".format((param.extra_folder)))
 
 # where we save the output
-log_output = open(f"{logs_dir}/log.txt", 'w')
+log_output = open("{}/log.txt".format((logs_dir)), 'w')
 print(param)
 print(param, file=log_output)
 
@@ -142,7 +143,7 @@ import math
 
 torch.utils.backcompat.broadcast_warning.enabled=True
 
-from fid import calculate_fid_given_paths as calc_fid
+#from fid import calculate_fid_given_paths as calc_fid
 #from inception import get_inception_score
 #from inception import load_images
 
@@ -150,8 +151,8 @@ from fid import calculate_fid_given_paths as calc_fid
 import random
 if param.seed is None:
 	param.seed = random.randint(1, 10000)
-print(f"Random Seed: {param.seed}")
-print(f"Random Seed: {param.seed}", file=log_output)
+print("Random Seed: {}".format((param.seed)))
+print("Random Seed: {}".format((param.seed)), file=log_output)
 random.seed(param.seed)
 numpy.random.seed(param.seed)
 torch.manual_seed(param.seed)
@@ -565,7 +566,7 @@ for i in range(param.n_iter):
 		########################
 
 		D.zero_grad()
-		images = random_sample.__next__()
+		images = random_sample.next() #random_sample.__next__()
 		# Mostly necessary for the last one because if N might not be a multiple of batch_size
 		current_batch_size = images.size(0)
 		if param.cuda:
@@ -671,7 +672,7 @@ for i in range(param.n_iter):
 		y_pred_fake = D(fake)
 
 		if param.loss_D in [10, 12, 14]:
-			images = random_sample.__next__()
+			images = random_sample.next() #random_sample.__next__()
 			current_batch_size = images.size(0)
 			if param.cuda:
 				images = images.cuda()
