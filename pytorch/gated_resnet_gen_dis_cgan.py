@@ -37,7 +37,10 @@ parser.add_argument('--ngres', type=int, default=32)
 parser.add_argument('--ngres_gate', type=int, default=32)
 parser.add_argument('--ndres', type=int, default=32)
 parser.add_argument('--ndres_gate', type=int, default=32)
+parser.add_argument('--spectral_G', type=bool, default=False)
+parser.add_argument('--spectral_D', type=bool, default=True)
 parser.add_argument('--outf', default='./conv_gated_resnet_resnet_gen/', help='folder to output images and model checkpoints')
+parser.add_argument('--dataset', default='MNIST', help='folder to output images and model checkpoints')
 opt = parser.parse_args()
 print(opt)
 try:
@@ -118,7 +121,7 @@ class GatedResnetConvResnetG(nn.Module):
         # Sets of residual blocks start
 
         for i in range(opt.ngres):
-            main_block+= [GatedConvResBlock(opt.ngf,opt.ngf,dropout=opt.dropout)] #[BATCHResBlock(opt.ngf,opt.dropout)]
+            main_block+= [GatedConvResBlock(opt.ngf,opt.ngf,dropout=opt.dropout,use_sn=opt.spectral_G)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
 
         # Final layer to map to 1 channel
@@ -186,30 +189,45 @@ class GatedResnetConvResnetD(nn.Module):
         self.opt=opt
 
         self.label_embedding = nn.Embedding(opt.n_classes, opt.nsalient)
-        self.main_latter = nn.Sequential(
-        nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1),
-        nn.LeakyReLU(0.1, inplace=True),
-        nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False),
-        nn.BatchNorm2d(2*opt.ndf),
-        nn.LeakyReLU(0.1, inplace=True),
-        nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False),
-        nn.BatchNorm2d(2*opt.ndf),
-        nn.LeakyReLU(0.1, inplace=True),
-        nn.Conv2d(2*opt.ndf, 1, 1),
-        nn.Sigmoid()
-        )
+        if opt.spectral_D:
+            self.main_latter = nn.Sequential(
+            spectral_norm(nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1)),
+            nn.LeakyReLU(0.1, inplace=True),
+            spectral_norm(nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False)),
+            nn.BatchNorm2d(2*opt.ndf),
+            nn.LeakyReLU(0.1, inplace=True),
+            spectral_norm(nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False)),
+            nn.BatchNorm2d(2*opt.ndf),
+            nn.LeakyReLU(0.1, inplace=True),
+            spectral_norm(nn.Conv2d(2*opt.ndf, 1, 1)),
+            nn.Sigmoid()
+            )
+        else:
+            self.main_latter = nn.Sequential(
+            nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(2*opt.ndf),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False),
+            nn.BatchNorm2d(2*opt.ndf),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.Conv2d(2*opt.ndf, 1, 1),
+            nn.Sigmoid()
+            )
 
 
         main_block=[]
         #Input is z going to series of rsidual blocks
         # First layer to map to ndf channel
-
-        main_block+=[nn.Conv2d(opt.nc,opt.ndf,kernel_size=3,stride=1,padding=1)]
-
+        if opt.spectral_D:
+            main_block+=[spectral_norm(nn.Conv2d(opt.nc,opt.ndf,kernel_size=3,stride=1,padding=1))]
+        else:
+            main_block+=[nn.Conv2d(opt.nc,opt.ndf,kernel_size=3,stride=1,padding=1)]
         # Sets of residual blocks start
 
         for i in range(opt.ndres):
-            main_block+= [GatedConvResBlock(opt.ndf,opt.ndf,dropout=opt.dropout)] #[BATCHResBlock(opt.ngf,opt.dropout)]
+            main_block+= [GatedConvResBlock(opt.ndf,opt.ndf,dropout=opt.dropout,use_sn=opt.spectral_D)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
 
         self.main=nn.Sequential(*main_block)
@@ -255,8 +273,10 @@ if cuda:
     auxiliary_loss.cuda()
 
 # Configure data loader
-#dataset = datasets.CIFAR10('./cifar_dataset', transform=transforms.Compose([ transforms.CenterCrop(opt.img_size) ,  transforms.ToTensor()]), download=True)
-dataset= datasets.MNIST('./mnist', train=True, download=True,
+if opt.dataset=="CIFAR":
+    dataset = datasets.CIFAR10('./cifar_dataset', transform=transforms.Compose([ transforms.CenterCrop(opt.img_size) ,  transforms.ToTensor()]), download=True)
+elif opt.dataset=="MNIST":
+    dataset= datasets.MNIST('./mnist', train=True, download=True,
                    transform=transforms.Compose([
                         transforms.Resize(opt.img_size),
                         transforms.ToTensor(),

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.utils.spectral_norm as spectral_norm
 def gaussian_weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
@@ -8,6 +8,14 @@ def gaussian_weights_init(m):
     elif classname.find('BatchNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
+
+class Reshape(nn.Module):
+    def __init__(self, *args):
+        super(Reshape, self).__init__()
+        self.shape = args
+
+    def forward(self, x):
+        return x.view(self.shape)
 
 
 class BATCHResBlock(nn.Module):
@@ -90,16 +98,19 @@ class GatedResBlock(nn.Module):
         return out
 
 class GatedConvResBlock(nn.Module):
-  def conv3x3(self, inplanes, out_planes, stride=1):
-    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+  def conv3x3(self, inplanes, out_planes, stride=1,use_sn=True):
+    if use_sn:
+        return spectral_norm(nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1))
+    else:
+        return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
 
-  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0,use_sn=False):
     super(GatedConvResBlock, self).__init__()
     model = []
-    model += [self.conv3x3(inplanes, planes, stride)]
+    model += [self.conv3x3(inplanes, planes, stride,use_sn)]
     model += [nn.BatchNorm2d(planes)]  #[nn.InstanceNorm2d(planes)]
     model += [nn.ReLU(inplace=True)]
-    model += [self.conv3x3(planes, planes)]
+    model += [self.conv3x3(planes, planes,stride,use_sn)]
     model += [nn.BatchNorm2d(planes)]  #[nn.InstanceNorm2d(planes)]
     if dropout > 0:
       model += [nn.Dropout(p=dropout)]
@@ -113,17 +124,21 @@ class GatedConvResBlock(nn.Module):
     return out
 
 class ConvResBlock(nn.Module):
-  def conv3x3(self, inplanes, out_planes, stride=1):
-    return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+  def conv3x3(self, inplanes, out_planes, stride=1,use_sn=True):
+    if use_sn:
+        return spectral_norm(nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1))
+    else:
+        return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
 
-  def __init__(self, inplanes, planes, stride=1, dropout=0.0):
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0,use_sn=False):
     super(ConvResBlock, self).__init__()
     model = []
-    model += [self.conv3x3(inplanes, planes, stride)]
-    #model += [nn.InstanceNorm2d(planes)]
+    model += [self.conv3x3(inplanes, planes, stride,use_sn)]
+    model += [nn.BatchNorm2d(planes)]
     model += [nn.ReLU(inplace=True)]
-    model += [self.conv3x3(planes, planes)]
-    #model += [nn.InstanceNorm2d(planes)]
+    model += [self.conv3x3(planes, planes,stride,use_sn)]
+    model += [nn.BatchNorm2d(planes)]
     if dropout > 0:
       model += [nn.Dropout(p=dropout)]
     self.model = nn.Sequential(*model)
@@ -134,6 +149,73 @@ class ConvResBlock(nn.Module):
     out = self.model(x)
     out += residual
     return out
+
+class UpConvResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1,use_sn=True):
+    if use_sn:
+        return spectral_norm(nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1))
+    else:
+        return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0,use_sn=False):
+    super(UpConvResBlock, self).__init__()
+    model = []
+    model += [nn.Upsample( scale_factor=2,mode='nearest')]
+    model += [self.conv3x3(inplanes, planes, stride,use_sn)]
+    model += [nn.BatchNorm2d(planes)]
+    model += [nn.ReLU(inplace=True)]
+    model += [self.conv3x3(planes, planes,stride,use_sn)]
+    model += [nn.BatchNorm2d(planes)]
+    if dropout > 0:
+      model += [nn.Dropout(p=dropout)]
+    self.model = nn.Sequential(*model)
+
+    residual_block = []
+    residual_block += [nn.Upsample(scale_factor=2,mode='nearest')]
+    residual_block += [self.conv3x3(inplanes,planes,stride,use_sn)]
+    #self.model.apply(gaussian_weights_init)
+    self.residual_block=nn.Sequential(*residual_block)
+
+  def forward(self, x):
+    residual = self.residual_block(x)
+    out = self.model(x)
+    out += residual
+    return out
+
+class DownConvResBlock(nn.Module):
+  def conv3x3(self, inplanes, out_planes, stride=1,use_sn=True):
+    if use_sn:
+        return spectral_norm(nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1))
+    else:
+        return nn.Conv2d(inplanes, out_planes, kernel_size=3, stride=stride, padding=1)
+
+
+  def __init__(self, inplanes, planes, stride=1, dropout=0.0,use_sn=False):
+    super(DownConvResBlock, self).__init__()
+    model = []
+    model += [nn.AvgPool2d(2, stride=2)]
+    model += [self.conv3x3(inplanes, planes, stride,use_sn)]
+    model += [nn.BatchNorm2d(planes)]
+    model += [nn.ReLU(inplace=True)]
+    model += [self.conv3x3(planes, planes,stride,use_sn)]
+    model += [nn.BatchNorm2d(planes)]
+    if dropout > 0:
+      model += [nn.Dropout(p=dropout)]
+    self.model = nn.Sequential(*model)
+
+    residual_block = []
+    residual_block += [self.conv3x3(inplanes,planes,stride,use_sn)]
+    residual_block += [nn.AvgPool2d(2, stride=2)]
+    #self.model.apply(gaussian_weights_init)
+    self.residual_block=nn.Sequential(*residual_block)
+
+  def forward(self, x):
+    residual = self.residual_block(x)
+    out = self.model(x)
+    out += residual
+    return out
+
 
 
 class MAX_SELECTResBlock(nn.Module):
