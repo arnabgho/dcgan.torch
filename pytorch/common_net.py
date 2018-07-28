@@ -79,6 +79,27 @@ class ResBlock(nn.Module):
         out+=residual
         return out
 
+class ResBlock1D(nn.Module):
+    def __init__(self,num_neurons,dropout=0.0):
+        super(ResBlock1D, self).__init__()
+
+        model = []
+        model += [ nn.Conv1d( num_neurons , num_neurons  , kernel_size=3, stride=1,padding=1)  ]
+        model += [nn.BatchNorm1d(num_neurons)] # Just testing might be removed
+        model += [nn.ReLU(inplace=True)]
+        model += [ nn.Conv1d( num_neurons , num_neurons  , kernel_size=3, stride=1,padding=1)  ]
+        model += [nn.BatchNorm1d(num_neurons)] # Just testing might be removed
+        if dropout > 0:
+            model += [nn.Dropout(p=dropout)]
+        self.model = nn.Sequential(*model)
+
+    def forward(self,x):
+        residual=x
+        out=self.model(x)
+        out+=residual
+        return out
+
+
 class GatedResBlock(nn.Module):
     def __init__(self,num_neurons,dropout=0.0):
         super(GatedResBlock, self).__init__()

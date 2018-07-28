@@ -150,9 +150,11 @@ class _netG(nn.Module):
         self.ngpu = ngpu
         self.main = nn.Sequential(
             # input is Z, going into a convolution
-            Reshape( opt.batchSize,opt.nz ),
+            #Reshape( opt.batchSize,opt.nz ),
+            Reshape( -1,opt.nz ),
             nn.Linear( opt.nz , 4*4*8*opt.ngf),
-            Reshape( opt.batchSize,8*opt.ngf,4,4 ),
+            #Reshape( opt.batchSize,8*opt.ngf,4,4 ),
+            Reshape( -1,8*opt.ngf,4,4 ),
             # state size. (8*ngf) x 4 x 4
             UpConvResBlock(8*opt.ngf,8*opt.ngf,use_sn=opt.spectral_G),
             # state size. (8*ngf) x 8 x 8
@@ -244,7 +246,8 @@ class _netD(nn.Module):
             # state size. (ndf*8) x 2 x 2
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2,stride=2),
-            Reshape( opt.batchSize , 8*opt.ndf ),
+            #Reshape( opt.batchSize , 8*opt.ndf ),
+            Reshape( -1 , 8*opt.ndf ),
             nn.Linear(8*opt.ndf,1),
             nn.Sigmoid()
         )
