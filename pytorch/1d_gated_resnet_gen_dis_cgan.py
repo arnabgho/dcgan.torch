@@ -34,8 +34,10 @@ parser.add_argument('--ngf_gate', type=int, default=32)
 parser.add_argument('--ndf', type=int, default=16)
 parser.add_argument('--ndf_gate', type=int, default=32)
 parser.add_argument('--ngres', type=int, default=16)
+parser.add_argument('--ngres_up', type=int, default=2)
 parser.add_argument('--ngres_gate', type=int, default=16)
 parser.add_argument('--ndres', type=int, default=16)
+parser.add_argument('--ndres_down', type=int, default=2)
 parser.add_argument('--ndres_gate', type=int, default=16)
 parser.add_argument('--spectral_G', type=bool, default=False)
 parser.add_argument('--spectral_D', type=bool, default=False)
@@ -50,6 +52,8 @@ except OSError:
 opt.nsalient=opt.n_classes
 opt.nnoise = opt.latent_dim
 opt.batchSize = opt.batch_size
+opt.ngres=opt.ngres + opt.ngres_up
+opt.ndres=opt.ndres + opt.ndres_down
 img_shape = (opt.channels, opt.img_size, opt.img_size)
 
 cuda = True if torch.cuda.is_available() else False
@@ -101,26 +105,39 @@ class GatedResnetConvResnetG(nn.Module):
         self.opt=opt
 
         self.label_embedding = nn.Embedding(opt.n_classes, opt.nsalient)
+        #self.main_initial = nn.Sequential(
+        #  nn.ConvTranspose2d(opt.nnoise, 4*opt.ngf, 1, 1, bias=False),
+        #  nn.BatchNorm2d(4*opt.ngf),
+        #  nn.ReLU(True),
+        #  nn.ConvTranspose2d(4*opt.ngf, 2*opt.ngf, 7, 1, bias=False),
+        #  nn.BatchNorm2d(2*opt.ngf),
+        #  nn.ReLU(True),
+        #  nn.ConvTranspose2d(2*opt.ngf, 2*opt.ngf, 4, 2, 1, bias=False),
+        #  nn.BatchNorm2d(2*opt.ngf),
+        #  nn.ReLU(True),
+        #  nn.ConvTranspose2d(2*opt.ngf, opt.ngf, 4, 2, 1, bias=False),
+        #  nn.BatchNorm2d(opt.ngf),
+        #  nn.ReLU(True),
+        #)
+
         self.main_initial = nn.Sequential(
           nn.ConvTranspose2d(opt.nnoise, 4*opt.ngf, 1, 1, bias=False),
           nn.BatchNorm2d(4*opt.ngf),
           nn.ReLU(True),
-          nn.ConvTranspose2d(4*opt.ngf, 2*opt.ngf, 7, 1, bias=False),
-          nn.BatchNorm2d(2*opt.ngf),
+          nn.ConvTranspose2d(4*opt.ngf, opt.ngf, 7, 1, bias=False),
+          nn.BatchNorm2d(opt.ngf),
           nn.ReLU(True),
-          nn.ConvTranspose2d(2*opt.ngf, 2*opt.ngf, 4, 2, 1, bias=False),
-          nn.BatchNorm2d(2*opt.ngf),
-          nn.ReLU(True),
-          nn.ConvTranspose2d(2*opt.ngf, opt.ngf, 4, 2, 1, bias=False),
-          #nn.Sigmoid()
-        )
+          )
 
         main_block=[]
         #Input is z going to series of rsidual blocks
 
         # Sets of residual blocks start
+        for i in range(opt.ngres_up):
+            main_block+= [UpGatedConvResBlock(opt.ngf,opt.ngf,dropout=opt.dropout,use_sn=opt.spectral_G)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
-        for i in range(opt.ngres):
+
+        for i in range(opt.ngres - opt.ngres_up ):
             main_block+= [GatedConvResBlock(opt.ngf,opt.ngf,dropout=opt.dropout,use_sn=opt.spectral_G)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
 
@@ -193,30 +210,57 @@ class GatedResnetConvResnetD(nn.Module):
         self.opt=opt
 
         self.label_embedding = nn.Embedding(opt.n_classes, opt.nsalient)
+        #if opt.spectral_D:
+        #    self.main_latter = nn.Sequential(
+        #    spectral_norm(nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1)),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    spectral_norm(nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False)),
+        #    nn.BatchNorm2d(2*opt.ndf),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    spectral_norm(nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False)),
+        #    nn.BatchNorm2d(2*opt.ndf),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    spectral_norm(nn.Conv2d(2*opt.ndf, 1, 1)),
+        #    nn.Sigmoid()
+        #    )
+        #else:
+        #    self.main_latter = nn.Sequential(
+        #    nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False),
+        #    nn.BatchNorm2d(2*opt.ndf),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False),
+        #    nn.BatchNorm2d(2*opt.ndf),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    nn.Conv2d(2*opt.ndf, 1, 1),
+        #    nn.Sigmoid()
+        #    )
+
         if opt.spectral_D:
             self.main_latter = nn.Sequential(
-            spectral_norm(nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1)),
+            #spectral_norm(nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1)),
+            #nn.LeakyReLU(0.1, inplace=True),
+            #spectral_norm(nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False)),
+            #nn.BatchNorm2d(2*opt.ndf),
+            #nn.LeakyReLU(0.1, inplace=True),
+            spectral_norm(nn.Conv2d(opt.ndf, opt.ndf, 7, bias=False)),
+            nn.BatchNorm2d(opt.ndf),
             nn.LeakyReLU(0.1, inplace=True),
-            spectral_norm(nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False)),
-            nn.BatchNorm2d(2*opt.ndf),
-            nn.LeakyReLU(0.1, inplace=True),
-            spectral_norm(nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False)),
-            nn.BatchNorm2d(2*opt.ndf),
-            nn.LeakyReLU(0.1, inplace=True),
-            spectral_norm(nn.Conv2d(2*opt.ndf, 1, 1)),
+            spectral_norm(nn.Conv2d(opt.ndf, 1, 1)),
             nn.Sigmoid()
             )
         else:
             self.main_latter = nn.Sequential(
-            nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1),
+            #nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1),
+            #nn.LeakyReLU(0.1, inplace=True),
+            #nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False),
+            #nn.BatchNorm2d(2*opt.ndf),
+            #nn.LeakyReLU(0.1, inplace=True),
+            nn.Conv2d(opt.ndf, opt.ndf, 7, bias=False),
+            nn.BatchNorm2d(opt.ndf),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(2*opt.ndf),
-            nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False),
-            nn.BatchNorm2d(2*opt.ndf),
-            nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(2*opt.ndf, 1, 1),
+            nn.Conv2d(opt.ndf, 1, 1),
             nn.Sigmoid()
             )
 
@@ -230,8 +274,11 @@ class GatedResnetConvResnetD(nn.Module):
             main_block+=[nn.Conv2d(opt.nc,opt.ndf,kernel_size=3,stride=1,padding=1)]
         # Sets of residual blocks start
 
-        for i in range(opt.ndres):
+        for i in range(opt.ndres - opt.ndres_down):
             main_block+= [GatedConvResBlock(opt.ndf,opt.ndf,dropout=opt.dropout,use_sn=opt.spectral_D)] #[BATCHResBlock(opt.ngf,opt.dropout)]
+
+        for i in range(opt.ndres_down):
+            main_block+= [DownGatedConvResBlock(opt.ndf,opt.ndf,dropout=opt.dropout,use_sn=opt.spectral_D)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
 
         self.main=nn.Sequential(*main_block)
@@ -262,7 +309,6 @@ class GatedResnetConvResnetD(nn.Module):
             alpha = output_gate[:,i-1]
             alpha = alpha.resize(self.opt.batchSize,1,1,1)
             output=self.main[i](output,alpha)
-
         output = self.main_latter(output)
         return output
 # Loss functions
@@ -354,7 +400,6 @@ for epoch in range(opt.n_epochs):
         # ---------------------
 
         optimizer_D.zero_grad()
-
         # Loss for real images
         validity_real = discriminator(real_imgs, labels)
         d_real_loss = adversarial_loss(validity_real, valid)
