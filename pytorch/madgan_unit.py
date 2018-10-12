@@ -166,10 +166,10 @@ class _netD(nn.Module):
         self.ngpu = ngpu
         input_dim_a = 3
         ch = 64
-        n_enc_front_blk  = 3
-        n_enc_latter_blk = 1  #2
-        n_enc_res_blk    = 1
-        n_enc_shared_blk = 3
+        n_enc_front_blk  = 2
+        n_enc_latter_blk = 1
+        n_enc_res_blk    = 3
+        n_enc_shared_blk = 1
         encA=[]
         encA += [LeakyReLUConv2d(input_dim_a, ch, kernel_size=7, stride=2, padding=1)]
         tch=ch
@@ -178,22 +178,22 @@ class _netD(nn.Module):
             tch *= 2
         for i in range(0,n_enc_latter_blk):
             encA += [ReLUINSConv2d(tch, tch , kernel_size=3, stride=2, padding=1)]  #[ReLUINSConv2d(tch, tch , kernel_size=3, stride=2, padding=1)]
+        encA += [nn.Conv2d(tch, tch , 3, 2, 1,bias=False)]
 
-        for i in range(opt.nresidual):
-            encA += [INSResBlock(tch, tch)]
+        #for i in range(opt.nresidual):
+        #    encA += [INSResBlock(tch, tch)]
         #encA += [INSResBlock(tch, tch)]
         #encA += [INSResBlock(tch, tch)]
         #encA+=[nn.Softmax()]
-        encA += [nn.Conv2d(tch, tch , 3, 2, 1,bias=False)]
         self.fch=tch
-        #for i in range(0, n_enc_res_blk):
-        #    encA += [INSResBlock(tch, tch)]
+        for i in range(0, n_enc_res_blk):
+            encA += [INSResBlock(tch, tch)]
 
-        #for i in range(0, n_enc_shared_blk):
-        #    encA += [INSResBlock(tch, tch)]
+        for i in range(0, n_enc_shared_blk):
+            encA += [INSResBlock(tch, tch)]
 
         self.linear=nn.Sequential(
-        nn.Conv2d(self.fch,ngen+1,1,1,0,bias=False),
+        nn.Conv2d(self.fch,ngen+1,2,2,0,bias=False),
         #nn.Sigmoid()
         )
         #encA += [GaussianNoiseLayer()]
