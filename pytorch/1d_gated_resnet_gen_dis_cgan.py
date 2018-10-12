@@ -17,7 +17,7 @@ from common_net import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_epochs', type=int, default=200, help='number of epochs of training')
-parser.add_argument('--batch_size', type=int, default=64, help='size of the batches')
+parser.add_argument('--batch_size', type=int, default=100, help='size of the batches')
 parser.add_argument('--lr', type=float, default=0.0002, help='adam: learning rate')
 parser.add_argument('--dropout', type=float, default=0.5, help='dropout value')
 parser.add_argument('--b1', type=float, default=0.5, help='adam: decay of first order momentum of gradient')
@@ -33,13 +33,15 @@ parser.add_argument('--ngf', type=int, default=16)
 parser.add_argument('--ngf_gate', type=int, default=32)
 parser.add_argument('--ndf', type=int, default=16)
 parser.add_argument('--ndf_gate', type=int, default=32)
-parser.add_argument('--ngres', type=int, default=32)
-parser.add_argument('--ngres_gate', type=int, default=32)
-parser.add_argument('--ndres', type=int, default=32)
-parser.add_argument('--ndres_gate', type=int, default=32)
+parser.add_argument('--ngres', type=int, default=16)
+parser.add_argument('--ngres_up', type=int, default=2)
+parser.add_argument('--ngres_gate', type=int, default=16)
+parser.add_argument('--ndres', type=int, default=16)
+parser.add_argument('--ndres_down', type=int, default=2)
+parser.add_argument('--ndres_gate', type=int, default=16)
 parser.add_argument('--spectral_G', type=bool, default=False)
-parser.add_argument('--spectral_D', type=bool, default=True)
-parser.add_argument('--outf', default='./conv_gated_resnet_resnet_gen/', help='folder to output images and model checkpoints')
+parser.add_argument('--spectral_D', type=bool, default=False)
+parser.add_argument('--outf', default='./1d_conv_gated_resnet_resnet_gen/', help='folder to output images and model checkpoints')
 parser.add_argument('--dataset', default='MNIST', help='folder to output images and model checkpoints')
 opt = parser.parse_args()
 print(opt)
@@ -50,6 +52,8 @@ except OSError:
 opt.nsalient=opt.n_classes
 opt.nnoise = opt.latent_dim
 opt.batchSize = opt.batch_size
+opt.ngres=opt.ngres + opt.ngres_up
+opt.ndres=opt.ndres + opt.ndres_down
 img_shape = (opt.channels, opt.img_size, opt.img_size)
 
 cuda = True if torch.cuda.is_available() else False
@@ -101,26 +105,39 @@ class GatedResnetConvResnetG(nn.Module):
         self.opt=opt
 
         self.label_embedding = nn.Embedding(opt.n_classes, opt.nsalient)
+        #self.main_initial = nn.Sequential(
+        #  nn.ConvTranspose2d(opt.nnoise, 4*opt.ngf, 1, 1, bias=False),
+        #  nn.BatchNorm2d(4*opt.ngf),
+        #  nn.ReLU(True),
+        #  nn.ConvTranspose2d(4*opt.ngf, 2*opt.ngf, 7, 1, bias=False),
+        #  nn.BatchNorm2d(2*opt.ngf),
+        #  nn.ReLU(True),
+        #  nn.ConvTranspose2d(2*opt.ngf, 2*opt.ngf, 4, 2, 1, bias=False),
+        #  nn.BatchNorm2d(2*opt.ngf),
+        #  nn.ReLU(True),
+        #  nn.ConvTranspose2d(2*opt.ngf, opt.ngf, 4, 2, 1, bias=False),
+        #  nn.BatchNorm2d(opt.ngf),
+        #  nn.ReLU(True),
+        #)
+
         self.main_initial = nn.Sequential(
           nn.ConvTranspose2d(opt.nnoise, 4*opt.ngf, 1, 1, bias=False),
           nn.BatchNorm2d(4*opt.ngf),
           nn.ReLU(True),
-          nn.ConvTranspose2d(4*opt.ngf, 2*opt.ngf, 7, 1, bias=False),
-          nn.BatchNorm2d(2*opt.ngf),
+          nn.ConvTranspose2d(4*opt.ngf, opt.ngf, 7, 1, bias=False),
+          nn.BatchNorm2d(opt.ngf),
           nn.ReLU(True),
-          nn.ConvTranspose2d(2*opt.ngf, 2*opt.ngf, 4, 2, 1, bias=False),
-          nn.BatchNorm2d(2*opt.ngf),
-          nn.ReLU(True),
-          nn.ConvTranspose2d(2*opt.ngf, opt.ngf, 4, 2, 1, bias=False),
-          #nn.Sigmoid()
-        )
+          )
 
         main_block=[]
         #Input is z going to series of rsidual blocks
 
         # Sets of residual blocks start
+        for i in range(opt.ngres_up):
+            main_block+= [UpGatedConvResBlock(opt.ngf,opt.ngf,dropout=opt.dropout,use_sn=opt.spectral_G)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
-        for i in range(opt.ngres):
+
+        for i in range(opt.ngres - opt.ngres_up ):
             main_block+= [GatedConvResBlock(opt.ngf,opt.ngf,dropout=opt.dropout,use_sn=opt.spectral_G)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
 
@@ -131,12 +148,16 @@ class GatedResnetConvResnetG(nn.Module):
         self.main=nn.Sequential(*main_block)
 
         gate_block =[]
-        gate_block+=[ nn.Linear(opt.nsalient ,opt.ngf_gate)]
+        #gate_block+=[ nn.Linear(opt.nsalient ,opt.ngf_gate)]
+        gate_block+=[ Reshape( -1, 1 ,opt.nsalient)  ]
+        gate_block+=[ nn.Conv1d(1,opt.ngf_gate,kernel_size=3,stride=1,padding=1)  ]
         #gate_block+=[ nn.BatchNorm1d(opt.ngf_gate) ]
         gate_block+=[ nn.ReLU()]
         for i in range(opt.ngres_gate):
-            gate_block+=[ResBlock(opt.ngf_gate,opt.dropout)]
-        gate_block+=[ nn.Linear(opt.ngf_gate,opt.ngres) ]
+            gate_block+=[ResBlock1D(opt.ngf_gate,opt.dropout)]
+        # state size (opt.batchSize, opt.ngf_gate, opt.nsalient)
+        gate_block+=[Reshape(-1,opt.ngf_gate*opt.nsalient)]
+        gate_block+=[ nn.Linear(opt.ngf_gate*opt.nsalient,opt.ngres) ]
         gate_block+= [ nn.Sigmoid()]# [nn.Softmax()]  #[ nn.Sigmoid()]
 
         self.gate=nn.Sequential(*gate_block)
@@ -189,30 +210,57 @@ class GatedResnetConvResnetD(nn.Module):
         self.opt=opt
 
         self.label_embedding = nn.Embedding(opt.n_classes, opt.nsalient)
+        #if opt.spectral_D:
+        #    self.main_latter = nn.Sequential(
+        #    spectral_norm(nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1)),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    spectral_norm(nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False)),
+        #    nn.BatchNorm2d(2*opt.ndf),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    spectral_norm(nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False)),
+        #    nn.BatchNorm2d(2*opt.ndf),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    spectral_norm(nn.Conv2d(2*opt.ndf, 1, 1)),
+        #    nn.Sigmoid()
+        #    )
+        #else:
+        #    self.main_latter = nn.Sequential(
+        #    nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False),
+        #    nn.BatchNorm2d(2*opt.ndf),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False),
+        #    nn.BatchNorm2d(2*opt.ndf),
+        #    nn.LeakyReLU(0.1, inplace=True),
+        #    nn.Conv2d(2*opt.ndf, 1, 1),
+        #    nn.Sigmoid()
+        #    )
+
         if opt.spectral_D:
             self.main_latter = nn.Sequential(
-            spectral_norm(nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1)),
+            #spectral_norm(nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1)),
+            #nn.LeakyReLU(0.1, inplace=True),
+            #spectral_norm(nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False)),
+            #nn.BatchNorm2d(2*opt.ndf),
+            #nn.LeakyReLU(0.1, inplace=True),
+            spectral_norm(nn.Conv2d(opt.ndf, opt.ndf, 7, bias=False)),
+            nn.BatchNorm2d(opt.ndf),
             nn.LeakyReLU(0.1, inplace=True),
-            spectral_norm(nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False)),
-            nn.BatchNorm2d(2*opt.ndf),
-            nn.LeakyReLU(0.1, inplace=True),
-            spectral_norm(nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False)),
-            nn.BatchNorm2d(2*opt.ndf),
-            nn.LeakyReLU(0.1, inplace=True),
-            spectral_norm(nn.Conv2d(2*opt.ndf, 1, 1)),
+            spectral_norm(nn.Conv2d(opt.ndf, 1, 1)),
             nn.Sigmoid()
             )
         else:
             self.main_latter = nn.Sequential(
-            nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1),
+            #nn.Conv2d(opt.ndf, opt.ndf, 4, 2, 1),
+            #nn.LeakyReLU(0.1, inplace=True),
+            #nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False),
+            #nn.BatchNorm2d(2*opt.ndf),
+            #nn.LeakyReLU(0.1, inplace=True),
+            nn.Conv2d(opt.ndf, opt.ndf, 7, bias=False),
+            nn.BatchNorm2d(opt.ndf),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(opt.ndf, 2*opt.ndf, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(2*opt.ndf),
-            nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(2*opt.ndf, 2*opt.ndf, 7, bias=False),
-            nn.BatchNorm2d(2*opt.ndf),
-            nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(2*opt.ndf, 1, 1),
+            nn.Conv2d(opt.ndf, 1, 1),
             nn.Sigmoid()
             )
 
@@ -226,19 +274,27 @@ class GatedResnetConvResnetD(nn.Module):
             main_block+=[nn.Conv2d(opt.nc,opt.ndf,kernel_size=3,stride=1,padding=1)]
         # Sets of residual blocks start
 
-        for i in range(opt.ndres):
+        for i in range(opt.ndres - opt.ndres_down):
             main_block+= [GatedConvResBlock(opt.ndf,opt.ndf,dropout=opt.dropout,use_sn=opt.spectral_D)] #[BATCHResBlock(opt.ngf,opt.dropout)]
+
+        for i in range(opt.ndres_down):
+            main_block+= [DownGatedConvResBlock(opt.ndf,opt.ndf,dropout=opt.dropout,use_sn=opt.spectral_D)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
 
         self.main=nn.Sequential(*main_block)
 
         gate_block =[]
-        gate_block+=[ nn.Linear(opt.nsalient ,opt.ndf_gate)]
+        gate_block+=[ Reshape( -1, 1 ,opt.nsalient)  ]
+        gate_block+=[ nn.Conv1d(1,opt.ngf_gate,kernel_size=3,stride=1,padding=1)  ]
+
+        #gate_block+=[ nn.Linear(opt.nsalient ,opt.ndf_gate)]
         #gate_block+=[ nn.BatchNorm1d(opt.ngf_gate) ]
         gate_block+=[ nn.ReLU()]
         for i in range(opt.ndres_gate):
-            gate_block+=[ResBlock(opt.ndf_gate,opt.dropout)]
-        gate_block+=[ nn.Linear(opt.ndf_gate,opt.ndres) ]
+            gate_block+=[ResBlock1D(opt.ndf_gate,opt.dropout)]
+        # state_size (opt.batchSize,opt.ndf_gate,opt.nsalient)
+        gate_block+= [Reshape(-1,opt.ndf_gate*opt.nsalient)]
+        gate_block+=[ nn.Linear(opt.ndf_gate*opt.nsalient,opt.ndres) ]
         gate_block+= [nn.Sigmoid()] #[nn.Softmax()]  #[ nn.Sigmoid()]
 
         self.gate=nn.Sequential(*gate_block)
@@ -253,7 +309,6 @@ class GatedResnetConvResnetD(nn.Module):
             alpha = output_gate[:,i-1]
             alpha = alpha.resize(self.opt.batchSize,1,1,1)
             output=self.main[i](output,alpha)
-
         output = self.main_latter(output)
         return output
 # Loss functions
@@ -265,7 +320,8 @@ auxiliary_loss = torch.nn.CrossEntropyLoss()
 #discriminator = Discriminator()
 generator = GatedResnetConvResnetG(opt)
 discriminator = GatedResnetConvResnetD(opt)
-
+print(generator)
+print(discriminator)
 if cuda:
     generator.cuda()
     discriminator.cuda()
@@ -344,7 +400,6 @@ for epoch in range(opt.n_epochs):
         # ---------------------
 
         optimizer_D.zero_grad()
-
         # Loss for real images
         validity_real = discriminator(real_imgs, labels)
         d_real_loss = adversarial_loss(validity_real, valid)
