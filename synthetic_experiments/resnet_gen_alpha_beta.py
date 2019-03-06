@@ -17,29 +17,30 @@ from common_net import *
 import math
 import sys
 from data_generator import *
-from torch.nn.utils import spectral_norm
-from spectral_normalization import *
 vis = visdom.Visdom()
-vis.env = 'sn_resnet_gen'
+vis.env = 'resnet_gen'
 parser = argparse.ArgumentParser()
 parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
 parser.add_argument('--batchSize', type=int, default=4096, help='input batch size')
 parser.add_argument('--out_dim', type=int, default=1, help='the output dimension')
 parser.add_argument('--nz', type=int, default=10, help='size of the latent z vector')
 parser.add_argument('--ngf', type=int, default=4)
+parser.add_argument('--ngf_gate', type=int, default=16)
 parser.add_argument('--ndf', type=int, default=4)
 parser.add_argument('--ngres', type=int, default=16)
+parser.add_argument('--ngres_gate', type=int, default=16)
 parser.add_argument('--ndres', type=int, default=16)
 parser.add_argument('--niter', type=int, default=1000, help='number of epochs to train for')
 parser.add_argument('--num_samples', type=int, default=1000000, help='number of samples in the dataset')
 parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
-parser.add_argument('--dropout', type=float, default=0.5, help='dropout rate, default=0')
+parser.add_argument('--dropout', type=float, default=0.0, help='dropout rate, default=0')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
+parser.add_argument('--affine', action='store_true', help='enables beta')
 parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--netG', default='', help="path to netG (to continue training)")
 parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='./sn_resnet_gen/', help='folder to output images and model checkpoints')
+parser.add_argument('--outf', default='./resnet_gen_alpha_beta/', help='folder to output images and model checkpoints')
 parser.add_argument('--manualSeed', type=int,default=7, help='manual seed')
 parser.add_argument('--dataset', type=str, default='1d', help='which dataset')
 opt = parser.parse_args()
@@ -69,6 +70,72 @@ elif opt.dataset== 'swiss_roll':
     opt.out_dim=3
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,shuffle=True, num_workers=int(opt.workers))
 ngpu=int(opt.ngpu)
+#class _netG(nn.Module):
+#    def __init__(self,ngpu):
+#        super(_netG,self).__init__()
+#        self.ngpu=ngpu
+#        main_block=[]
+#
+#        #Input is z going to series of rsidual blocks
+#
+#        main_block+=[nn.Linear(opt.nz,opt.ngf) ]
+#
+#        # Sets of residual blocks start
+#
+#        for i in range(opt.ngres):
+#            main_block+= [ResBlock(opt.ngf,opt.dropout,use_sn=False)] #[BATCHResBlock(opt.ngf,opt.dropout)]
+#
+#        # Final layer to map to 1D
+#
+#        main_block+=[nn.Linear(opt.ngf,opt.out_dim)]
+#
+#        self.main=nn.Sequential(*main_block)
+#
+#        alpha_pred_blocks = []
+#        alpha_pred_blocks += [nn.Linear(opt.nz,opt.ngf_gate)]
+#        for i in range(opt.ngres_gate):
+#            alpha_pred_blocks += [ResBlock(opt.ngf_gate,opt.dropout,use_sn=False)]
+#        alpha_pred_blocks += [nn.Linear(opt.ngf_gate,opt.ngres)]
+#        alpha_pred_blocks += [nn.Sigmoid() ]
+#        self.alpha_pred = nn.Sequential(*alpha_pred_blocks)
+#
+#        if opt.affine:
+#            beta_pred_blocks = []
+#            beta_pred_blocks += [nn.Linear(opt.nz,opt.ngf_gate)]
+#            for i in range(opt.ngres_gate):
+#                beta_pred_blocks += [ResBlock(opt.ngf_gate,opt.dropout,use_sn=False)]
+#            beta_pred_blocks += [nn.Linear(opt.ngf_gate,opt.ngres)]
+#            beta_pred_blocks += [nn.Tanh()] #[nn.Sigmoid()]
+#            self.beta_pred = nn.Sequential(*beta_pred_blocks)
+#
+#
+#        self.constant_input = torch.Tensor(opt.batchSize,opt.nz).fill_(1).cuda()
+#
+#    def forward(self, input):
+#        #if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:
+#        #    output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
+#        #else:
+#        #    output = self.main(input)
+#        alphas = self.alpha_pred(input)
+#        if opt.affine:
+#            betas = self.beta_pred(input)
+#
+#        output = self.main[0](self.constant_input)
+#
+#        for i in range(opt.ngres):
+#            alpha = alphas[:,i]
+#            alpha=alpha.resize(opt.batchSize,1)
+#            if opt.affine:
+#                beta = betas[:,i]
+#                beta = beta.resize(opt.batchSize,1)
+#                output = self.main[i+1](output,alpha,beta)
+#            else:
+#                output = self.main[i+1](output,alpha)
+#
+#        output = self.main[opt.ngres+1](output)
+#
+#        return output
+
 class _netG(nn.Module):
     def __init__(self,ngpu):
         super(_netG,self).__init__()
@@ -77,28 +144,71 @@ class _netG(nn.Module):
 
         #Input is z going to series of rsidual blocks
 
-        main_block+=[spectral_norm(nn.Linear(opt.nz,opt.ngf) ) ]
+        main_block+=[nn.Linear(opt.nz,opt.ngf) ]
 
         # Sets of residual blocks start
 
         for i in range(opt.ngres):
-            main_block+= [ ResBlock(opt.ngf,opt.dropout,use_sn=True)  ] #[BATCHResBlock(opt.ngf,opt.dropout)]
+            main_block+= [ResBlock(opt.ngf,opt.dropout,use_sn=False)] #[BATCHResBlock(opt.ngf,opt.dropout)]
 
         # Final layer to map to 1D
 
-        main_block+=[ spectral_norm( nn.Linear(opt.ngf,opt.out_dim) ) ]
+        main_block+=[nn.Linear(opt.ngf,opt.out_dim)]
 
         self.main=nn.Sequential(*main_block)
 
+        alpha_pred_blocks = []
+        alpha_pred_blocks += [Reshape(-1,1,opt.nz)]
+        alpha_pred_blocks +=[ nn.Conv1d(1,opt.ngf_gate,kernel_size=3,stride=1,padding=1)  ]
+        alpha_pred_blocks += [nn.ReLU()]
+        for i in range(opt.ngres_gate):
+            alpha_pred_blocks += [ResBlock1D(opt.ngf_gate,opt.dropout)]
+        alpha_pred_blocks += [Reshape(-1,opt.ngf_gate*opt.nz)]
+        alpha_pred_blocks += [nn.Linear(opt.ngf_gate*opt.nz,opt.ngres)]
+        alpha_pred_blocks += [nn.Sigmoid() ]
+        self.alpha_pred = nn.Sequential(*alpha_pred_blocks)
+
+        if opt.affine:
+            beta_pred_blocks = []
+            beta_pred_blocks += [Reshape(-1,1,opt.nz)]
+            beta_pred_blocks +=[ nn.Conv1d(1,opt.ngf_gate,kernel_size=3,stride=1,padding=1)  ]
+            beta_pred_blocks += [nn.ReLU()]
+
+            for i in range(opt.ngres_gate):
+                beta_pred_blocks += [ResBlock1D(opt.ngf_gate,opt.dropout)]
+
+            beta_pred_blocks += [Reshape(-1,opt.ngf_gate*opt.nz)]
+            beta_pred_blocks += [nn.Linear(opt.ngf_gate*opt.nz,opt.ngres)]
+            beta_pred_blocks += [nn.Tanh()] #[nn.Sigmoid()]
+            self.beta_pred = nn.Sequential(*beta_pred_blocks)
+
+
+        self.constant_input = torch.Tensor(opt.batchSize,opt.nz).fill_(1).cuda()
 
     def forward(self, input):
-        if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:
-            output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
-        else:
-            output = self.main(input)
+        #if isinstance(input.data, torch.cuda.FloatTensor) and self.ngpu > 1:
+        #    output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
+        #else:
+        #    output = self.main(input)
+        alphas = self.alpha_pred(input)
+        if opt.affine:
+            betas = self.beta_pred(input)
+
+        output = self.main[0](self.constant_input)
+
+        for i in range(opt.ngres):
+            alpha = alphas[:,i]
+            alpha=alpha.resize(opt.batchSize,1)
+            if opt.affine:
+                beta = betas[:,i]
+                beta = beta.resize(opt.batchSize,1)
+                output = self.main[i+1](output,alpha,beta)
+            else:
+                output = self.main[i+1](output,alpha)
+
+        output = self.main[opt.ngres+1](output)
+
         return output
-
-
 netG = _netG(ngpu)
 
 if opt.netG != '':
@@ -112,16 +222,16 @@ class _netD(nn.Module):
 
         #Input is 1D going to series of residual blocks
 
-        main_block+=[spectral_norm(nn.Linear(opt.out_dim,opt.ngf)) ]
+        main_block+=[nn.Linear(opt.out_dim,opt.ngf) ]
         main_block+=[nn.ReLU()]
         # Sets of residual blocks start
 
         for i in range(opt.ndres):
-            main_block+= [ResBlock(opt.ngf,opt.dropout,use_sn=True)  ] # [BATCHResBlock(opt.ngf,opt.dropout)]
+            main_block+= [ResBlock(opt.ngf,opt.dropout,use_sn=False)] # [BATCHResBlock(opt.ngf,opt.dropout)]
 
         # Final layer to map to sigmoid output
 
-        main_block+=[spectral_norm(nn.Linear(opt.ngf,1))]
+        main_block+=[nn.Linear(opt.ngf,1)]
         main_block+=[nn.Sigmoid()]
 
         self.main=nn.Sequential(*main_block)
@@ -231,7 +341,8 @@ for epoch in range(opt.niter):
         optimizerG.step()
 
         print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
-                % (epoch, opt.niter, i, len(dataloader),errD.data.item(), errG.data.item(), D_x, D_G_z1, D_G_z2))
+              % (epoch, opt.niter, i, len(dataloader),
+                 errD.data.item(), errG.data.item(), D_x, D_G_z1, D_G_z2))
     # do checkpointing
         torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (opt.outf, epoch))
         torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (opt.outf, epoch))

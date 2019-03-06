@@ -12,7 +12,10 @@ import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.axes3d as p3
 from sklearn.datasets.samples_generator import make_swiss_roll
 sns.set(color_codes=True)
+sns.set_palette(sns.dark_palette("purple"))
+sns.set(rc={'axes.facecolor':'white', 'figure.facecolor':'white'})
 
+#sns.set_palette(sns.cubehelix_palette(8))
 class MoG1DDataset(Dataset):
     "MoG1D Dataset"
     def __init__(self,spec_file='specs1D.txt',num_samples=1000000,load_file='data1D.npy',load=False):
@@ -28,14 +31,14 @@ class MoG1DDataset(Dataset):
 
     def plot_samples(self,filename='samples.png'):
         fig,axs= plt.subplots()
-        sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False)
+        sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False)#, color='g' )
         plt.savefig(filename)
         plt.clf()
         plt.close()
     def plot_generated_samples(self,generated_samples,filename='generated_samples.png'):
         fig,axs= plt.subplots()
-        sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False)
-        sns.distplot(generated_samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False)
+        sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False) #, color='g')
+        sns.distplot(generated_samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False) #, color='b')
         plt.savefig(filename)
         plt.clf()
         plt.close()
@@ -48,7 +51,7 @@ class MoG1DDataset(Dataset):
         bin_range_rounded[0:num_bins]=bin_range
         total_gen=0
         while(total_gen<=num_bins):
-            input.copy_(torch.Tensor(bin_range_rounded[total_gen:total_gen+batch_size]))
+            input.copy_(torch.Tensor(bin_range_rounded[total_gen:total_gen+batch_size]).reshape(batch_size,1))
             inputv=Variable(input)
             output=netD(inputv)
             output_np=output.data.cpu().numpy().reshape(batch_size)
@@ -85,9 +88,9 @@ class MoG1DDataset(Dataset):
         bin_range=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1)
         output_D=self.estimate_prob_discriminator(netD,batch_size,bin_range)
         samples_D=self.generate_samples_D(self.samples,bin_range,output_D)
-        sns.distplot(self.samples,ax=axs, bins=bin_range , kde=False)
-        sns.distplot(generated_samples,ax=axs, bins=bin_range , kde=False)
-        sns.distplot(samples_D,ax=axs,bins=bin_range, kde=False)
+        sns.distplot(self.samples,ax=axs, bins=bin_range , kde=False) #,color='g')
+        sns.distplot(generated_samples,ax=axs, bins=bin_range , kde=False) #,color='b')
+        sns.distplot(samples_D,ax=axs,bins=bin_range, kde=False) # ,color='r')
         plt.savefig(filename)
         plt.clf()
 
