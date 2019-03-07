@@ -35,9 +35,10 @@ class MoG1DDataset(Dataset):
         plt.savefig(filename)
         plt.clf()
         plt.close()
-    def plot_generated_samples(self,generated_samples,filename='generated_samples.png'):
+    def plot_generated_samples(self,generated_samples,filename='generated_samples.png',generations_only=False):
         fig,axs= plt.subplots()
-        sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False) #, color='g')
+        if not generations_only:
+            sns.distplot(self.samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False) #, color='g')
         sns.distplot(generated_samples,ax=axs, bins=pl.frange(int(min(self.mode_info['modes'])-20),int(max(self.mode_info['modes'])+20),0.1) , kde=False) #, color='b')
         plt.savefig(filename)
         plt.clf()
